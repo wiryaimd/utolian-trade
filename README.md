@@ -44,10 +44,15 @@ The **dashboard** is a read-only web page that refreshes every 30 s. It shows:
 - an **"Is it behaving like the research?"** health check, which gives each check a plain-English verdict.
 
 To run it:
-1. Set `DASHBOARD_PASSWORD` in `.env`.
-2. Start everything with `docker compose up -d --build`. The dashboard listens on the VPS at `127.0.0.1:8080`.
-3. From your PC, run `ssh -L 8080:127.0.0.1:8080 user@your-vps` and open http://localhost:8080. Alternatively, put it
-   behind your reverse proxy with TLS.
+1. Set `DASHBOARD_PASSWORD` in `.env`. Use 16+ random characters if the page will be public.
+2. Choose how to reach it with `DASHBOARD_BIND` in `.env`:
+   - `127.0.0.1` (default, safest): the page is only reachable on the VPS. From your PC run
+     `ssh -N -L 8080:127.0.0.1:8080 user@your-vps` and open http://localhost:8080.
+   - `0.0.0.0`: open http://<vps-ip>:8080 directly from anywhere. This is plain HTTP, so the password travels
+     unencrypted; use a unique password. 10 wrong logins lock that IP out for 15 minutes.
+   - For HTTPS, keep `127.0.0.1` and put a reverse proxy (e.g. Caddy) in front.
+3. Start everything with `docker compose up -d --build`. After changing `DASHBOARD_BIND`, run
+   `docker compose up -d dashboard` to apply it.
 
 The dashboard opens the bot's SQLite read-only and can't place or change trades. To act on the bot, use Telegram
 (`/pause`, `/resume`, `/close`).

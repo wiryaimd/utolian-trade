@@ -10,8 +10,11 @@ from __future__ import annotations
 
 import base64
 import hmac
+import http.client
 import json
 import math
+import socket
+import sqlite3
 import statistics
 import threading
 import time
@@ -155,9 +158,29 @@ def health_checks(main: dict, stats: dict, weeks: float, data_age_min: float | N
     return out
 
 
+LOOPBACK = ("127.0.0.1", "localhost", "::1")
+
+
+def access_check(access: dict | None) -> dict | None:
+    """Health item about how the dashboard itself is exposed (shown only when it is public)."""
+    if not access or not access.get("public"):
+        return None
+    n = access.get("password_len", 0)
+    if n < 16:
+        return {"name": "Dashboard access", "status": "bad", "value": f"public, plain HTTP, {n}-char password",
+                "expect": "16+ random characters",
+                "note": "Anyone on the internet can reach this login page and the password crosses the network "
+                        "unencrypted. Set DASHBOARD_PASSWORD to 16+ random characters (openssl rand -base64 18), "
+                        "or switch back to the SSH tunnel."}
+    return {"name": "Dashboard access", "status": "watch", "value": "public, plain HTTP", "expect": "HTTPS or tunnel",
+            "note": "The password crosses the network unencrypted: avoid logging in on public Wi-Fi, or use the "
+                    "SSH tunnel / an HTTPS proxy. Repeated wrong logins are locked out automatically."}
+
+
 class DashboardData:
-    def __init__(self, db_path: Path | str):
+    def __init__(self, db_path: Path | str, access: dict | None = None):
         self.db_path = Path(db_path)
+        self.access = access
         self.lock = threading.Lock()
 
     def payload(self) -> dict:
@@ -257,16 +280,95 @@ class DashboardData:
             "books": out_books, "live": live, "series": series,
             "trades": sorted(trades, key=lambda t: t["exit_time"], reverse=True)[:300],
             "events": db.events(150), "per_symbol": per_symbol, "research": RESEARCH,
-            "health": health_checks(main, main["stats"], weeks, data_age, source == "replay", live,
-                                    meta.get("max_drawdown_pause", 0.35)),
+            "health": [h for h in [access_check(self.access)] if h] + health_checks(
+                main, main["stats"], weeks, data_age, source == "replay", live, meta.get("max_drawdown_pause", 0.35)),
         }
 
 
-def make_handler(data: DashboardData, user: str, password: str):
+class LoginGuard:
+    """Lockouts after repeated WRONG credentials (a browser's first, credential-less request is not a
+    failure):
+      - per IP: max_fails within window_s locks that IP for lock_s;
+      - global: global_max wrong logins within global_window_s from ALL IPs together pause every login
+        for global_lock_s. This caps distributed guessing (~2,400/day by default) at the cost of letting
+        an attacker block logins temporarily, an acceptable trade for a read-only dashboard.
+    Thread-safe; memory stays bounded under attacks from many addresses."""
+
+    def __init__(self, max_fails: int = 10, window_s: int = 900, lock_s: int = 900, global_max: int = 100,
+                 global_window_s: int = 3600, global_lock_s: int = 1800, clock=time.monotonic):
+        self.max_fails, self.window_s, self.lock_s, self.clock = max_fails, window_s, lock_s, clock
+        self.global_max, self.global_window_s, self.global_lock_s = global_max, global_window_s, global_lock_s
+        self.fails: dict[str, list[float]] = {}
+        self.locked: dict[str, float] = {}
+        self.global_fails: list[float] = []
+        self.global_until = 0.0
+        self.last_try: dict[str, float] = {}
+        self._last_sweep = -1e9
+        self.lock = threading.Lock()
+
+    def _sweep(self, now: float) -> None:
+        if now - self._last_sweep < 60 and len(self.locked) < 50_000 and len(self.fails) < 50_000:
+            return
+        self._last_sweep = now
+        self.fails = {k: v for k, v in self.fails.items() if v and now - v[-1] < self.window_s}
+        self.locked = {k: u for k, u in self.locked.items() if u > now}
+        self.last_try = {k: t for k, t in self.last_try.items() if now - t < 60}
+        if len(self.locked) > 50_000:  # hard cap: keep the longest-running locks
+            self.locked = dict(sorted(self.locked.items(), key=lambda kv: kv[1])[-50_000:])
+        if len(self.fails) > 50_000:
+            self.fails = dict(sorted(self.fails.items(), key=lambda kv: kv[1][-1])[-50_000:])
+
+    def may_try(self, ip: str) -> bool:
+        """While an IP (not the whole server) is locked, allow one credential attempt per minute, so the
+        owner can get back in with the right password; guessing stays at 1/min for that IP."""
+        now = self.clock()
+        with self.lock:
+            if self.global_until > now or now - self.last_try.get(ip, -1e9) < 60:
+                return False
+            self.last_try[ip] = now
+            return True
+
+    def retry_after(self, ip: str) -> int:
+        with self.lock:
+            now = self.clock()
+            left = max(self.locked.get(ip, 0.0), self.global_until) - now
+            if self.locked.get(ip, 0.0) <= now:
+                self.locked.pop(ip, None)
+            return int(left) + 1 if left > 0 else 0
+
+    def failed(self, ip: str) -> str | None:
+        """Record a wrong login. Returns "ip" or "global" when this failure triggers a lockout."""
+        now = self.clock()
+        with self.lock:
+            self._sweep(now)
+            self.global_fails = [t for t in self.global_fails if now - t < self.global_window_s] + [now]
+            if len(self.global_fails) >= self.global_max and self.global_until <= now:
+                self.global_until = now + self.global_lock_s
+                self.global_fails = []
+                return "global"
+            recent = [t for t in self.fails.get(ip, []) if now - t < self.window_s] + [now]
+            self.fails[ip] = recent
+            if len(recent) >= self.max_fails:
+                self.locked[ip] = now + self.lock_s
+                self.fails.pop(ip, None)
+                return "ip"
+            return None
+
+    def succeeded(self, ip: str) -> None:
+        with self.lock:
+            self.fails.pop(ip, None)
+            self.locked.pop(ip, None)
+            self.last_try.pop(ip, None)
+
+
+def make_handler(data: DashboardData, user: str, password: str, guard: LoginGuard | None = None):
     token = base64.b64encode(f"{user}:{password}".encode()).decode() if password else None
+    guard = guard or LoginGuard()
 
     class Handler(BaseHTTPRequestHandler):
-        server_version = "btcq-dashboard"
+        server_version = "httpd"
+        sys_version = ""
+        timeout = 20  # seconds per socket read/write: slow or stuck clients can't pin threads
 
         def log_message(self, fmt, *args):  # keep container logs quiet
             pass
@@ -274,8 +376,23 @@ def make_handler(data: DashboardData, user: str, password: str):
         def _auth_ok(self) -> bool:
             if token is None:
                 return True
+            ip = self.client_address[0]
             got = self.headers.get("Authorization", "")
-            return got.startswith("Basic ") and hmac.compare_digest(got[6:], token)
+            if not got:
+                return False  # first request from a browser: ask for credentials, not a failure
+            if got.startswith("Basic ") and hmac.compare_digest(got[6:].encode("latin-1", "replace"),
+                                                                token.encode("ascii")):
+                guard.succeeded(ip)
+                return True
+            hit = guard.failed(ip)
+            if hit == "ip":
+                print(f"dashboard: {ip} locked out for {guard.lock_s // 60} min after "
+                      f"{guard.max_fails} wrong logins", flush=True)
+            elif hit == "global":
+                print(f"dashboard: {guard.global_max} wrong logins from all addresses within "
+                      f"{guard.global_window_s // 60} min; ALL logins paused for {guard.global_lock_s // 60} min",
+                      flush=True)
+            return False
 
         def _send(self, code: int, body: bytes, ctype: str, extra: dict | None = None):
             self.send_response(code)
@@ -284,6 +401,7 @@ def make_handler(data: DashboardData, user: str, password: str):
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("X-Frame-Options", "DENY")
             for k, v in (extra or {}).items():
                 self.send_header(k, v)
             self.end_headers()
@@ -293,22 +411,105 @@ def make_handler(data: DashboardData, user: str, password: str):
             path = self.path.split("?")[0]
             if path == "/healthz":
                 return self._send(200, b"ok", "text/plain")
+            ip = self.client_address[0]
+            wait = guard.retry_after(ip)
+            if wait and not (self.headers.get("Authorization") and guard.may_try(ip)):
+                return self._send(429, b"too many wrong logins, try again later", "text/plain",
+                                  {"Retry-After": str(wait)})
             if not self._auth_ok():
                 return self._send(401, b"authentication required", "text/plain",
-                                  {"WWW-Authenticate": 'Basic realm="btcq dashboard"'})
+                                  {"WWW-Authenticate": 'Basic realm="restricted", charset="UTF-8"'})
             if path in ("/", "/index.html"):
                 return self._send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
             if path == "/api/data":
-                body = json.dumps(data.payload(), allow_nan=False, default=str).encode()
+                try:
+                    body = json.dumps(data.payload(), allow_nan=False, default=str).encode()
+                except sqlite3.Error:
+                    return self._send(503, b'{"ready": false, "message": "bot database busy, retrying"}',
+                                      "application/json", {"Retry-After": "5"})
+                except Exception as e:  # noqa: BLE001 - never leak details to the client
+                    print(f"dashboard: payload failed: {type(e).__name__}: {e}"[:240], flush=True)
+                    return self._send(500, b'{"ready": false, "message": "dashboard error, see container log"}',
+                                      "application/json")
                 return self._send(200, body, "application/json")
             return self._send(404, b"not found", "text/plain")
 
     return Handler
 
 
+def _hard_close(request) -> None:
+    try:
+        request.shutdown(socket.SHUT_RDWR)
+    except OSError:
+        pass
+
+
+class QuietServer(ThreadingHTTPServer):
+    """Internet-facing hardening for the stdlib threaded server:
+      - at most max_connections concurrent connections (extra ones are closed, no thread spawned);
+      - each connection is cut after request_deadline_s in total (per-read timeouts alone let a
+        client trickle bytes forever);
+      - client disconnects are silent; other errors log at most one short line per minute."""
+    daemon_threads = True
+    request_queue_size = 128
+    max_connections = 64
+    request_deadline_s = 30
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._slots = threading.BoundedSemaphore(self.max_connections)
+
+    def process_request(self, request, client_address):
+        if not self._slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self._slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        timer = threading.Timer(self.request_deadline_s, _hard_close, (request,))
+        timer.daemon = True
+        timer.start()
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            timer.cancel()
+            self._slots.release()
+    _last_log = -1e9
+    _suppressed = 0
+    _log_lock = threading.Lock()
+
+    def handle_error(self, request, client_address):
+        import sys
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (ConnectionError, TimeoutError, OSError)):
+            return  # resets, aborted or deadline-cut connections: expected on the internet
+        with self._log_lock:
+            now = time.monotonic()
+            if now - self._last_log < 60:
+                QuietServer._suppressed += 1
+                return
+            extra = f" ({QuietServer._suppressed} similar errors suppressed)" if QuietServer._suppressed else ""
+            QuietServer._last_log, QuietServer._suppressed = now, 0
+        print(f"dashboard: request from {client_address[0]} failed: {type(exc).__name__}: {exc}"[:240] + extra,
+              flush=True)
+
+
 def serve(db_path: Path | str, host: str = "127.0.0.1", port: int = 8080, user: str = "admin",
           password: str = "", allow_no_auth: bool = False) -> ThreadingHTTPServer:
-    if not password and host not in ("127.0.0.1", "localhost", "::1") and not allow_no_auth:
+    if not password and host not in LOOPBACK and not allow_no_auth:
         raise SystemExit("Set DASHBOARD_PASSWORD to serve the dashboard beyond localhost "
                          "(or bind --host 127.0.0.1 and use an SSH tunnel).")
-    return ThreadingHTTPServer((host, port), make_handler(DashboardData(db_path), user, password))
+    if password and len(password) < 16:
+        print(f"WARNING: DASHBOARD_PASSWORD is only {len(password)} characters. If the dashboard is reachable "
+              "from the internet, use 16+ random characters (e.g. `openssl rand -base64 18`).", flush=True)
+    http.client._MAXLINE = 8192      # longest header line: oversize -> 431 instead of buffering 64 KB
+    http.client._MAXHEADERS = 32     # header count
+    # Inside Docker the server always listens on 0.0.0.0; DASHBOARD_BIND says what is actually published.
+    import os
+    public = os.environ.get("DASHBOARD_BIND", host) not in LOOPBACK
+    access = {"public": public, "password_len": len(password)}
+    return QuietServer((host, port), make_handler(DashboardData(db_path, access), user, password))

@@ -25,7 +25,7 @@ class StateDB:
     def __init__(self, path: Path | str, readonly: bool = False):
         if readonly:  # dashboard: never writes, never creates
             self.conn = sqlite3.connect(f"file:{Path(path).as_posix()}?mode=ro", uri=True,
-                                        check_same_thread=False)
+                                        check_same_thread=False, timeout=1.0)
             return
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(path))

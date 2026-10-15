@@ -14,12 +14,22 @@ services:
     build: .
     container_name: btcq-dashboard
     command: ["python", "-m", "btcq.live", "dashboard", "--host", "0.0.0.0", "--port", "8080"]
-    env_file: .env              # needs DASHBOARD_PASSWORD
+    # Least privilege: only the dashboard login, never the bot's Binance/Telegram secrets
+    # (Compose fills these from .env).
+    environment:
+      DASHBOARD_USER: ${DASHBOARD_USER:-admin}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-}
+      DASHBOARD_BIND: ${DASHBOARD_BIND:-127.0.0.1}
     volumes:
-      - ./state:/app/state      # opened read-only by the dashboard (SQLite mode=ro)
+      - ./state:/app/state:ro   # read-only mount; SQLite is also opened with mode=ro
     ports:
-      - "127.0.0.1:8080:8080"   # localhost only; reach it via SSH tunnel or your reverse proxy
+      # Default: VPS localhost only (open it through an SSH tunnel).
+      # DASHBOARD_BIND=0.0.0.0 in .env publishes it on the server's public IP (plain HTTP + password).
+      - "${DASHBOARD_BIND:-127.0.0.1}:8080:8080"
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz')"]
       interval: 2m
