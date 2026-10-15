@@ -27,6 +27,31 @@ the backtest engine's trades exactly.
    - Restarts resume from SQLite and backfill missed minutes over REST.
 5. Keep the VPS clock synced with NTP (`timedatectl`), because data freshness checks use wall time.
 
+## Monitoring: dashboard + Telegram
+Where you can see the bot's trades depends on the mode:
+
+| Mode | Visible on binance.com? | Where to watch |
+|---|---|---|
+| `TRADING_MODE=paper` | No: fills are simulated inside the bot, on real Binance prices | Dashboard + Telegram |
+| `live` + `BINANCE_ENV=testnet` | Yes, on testnet.binancefuture.com (fake money) | Dashboard + Telegram + testnet site |
+| `live` + `BINANCE_ENV=mainnet` | Yes, on binance.com → Futures → Positions / Open Orders | Dashboard + Telegram + Binance |
+
+The **dashboard** is a read-only web page that refreshes every 30 s. It shows:
+- equity and drawdown;
+- a growth chart (paper, shadow and live account);
+- open positions with their stops, and closed trades;
+- per-market results and an activity log;
+- an **"Is it behaving like the research?"** health check, which gives each check a plain-English verdict.
+
+To run it:
+1. Set `DASHBOARD_PASSWORD` in `.env`.
+2. Start everything with `docker compose up -d --build`. The dashboard listens on the VPS at `127.0.0.1:8080`.
+3. From your PC, run `ssh -L 8080:127.0.0.1:8080 user@your-vps` and open http://localhost:8080. Alternatively, put it
+   behind your reverse proxy with TLS.
+
+The dashboard opens the bot's SQLite read-only and can't place or change trades. To act on the bot, use Telegram
+(`/pause`, `/resume`, `/close`).
+
 **Telegram commands:** `/status`, `/positions`, `/trades [n]`, `/pause`, `/resume`, `/close SYMBOL`, `/compare`, `/help`.
 
 ## Real orders (TRADING_MODE=live)
@@ -78,6 +103,7 @@ python -m btcq.live status
 ## Replay (engineering check on archived data, no network)
 ```
 python -m btcq.live replay --start 2023-01-01 --end 2024-01-01
+python -m btcq.live dashboard --db state/replay/bot.sqlite      # browse the replay at http://127.0.0.1:8080
 ```
 This needs the local archive (`python -m btcq.research.run download`). Replays into 2024+ need `--unlock-holdout`,
 which is logged.

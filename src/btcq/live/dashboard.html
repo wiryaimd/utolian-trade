@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>F1 Trading Monitor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.27.0/plotly.min.js"></script>
+<style>
+:root{color-scheme:light;--page:#f9f9f7;--surface-1:#fcfcfb;--text-primary:#0b0b0b;--text-secondary:#52514e;
+--text-muted:#898781;--grid:#e1e0d9;--axis:#c3c2b7;--border:rgba(11,11,11,.10);--series-1:#2a78d6;--series-2:#eb6834;
+--series-3:#1baf7a;--div-neg:#e34948;--good:#0ca30c;--good-text:#006300;--warning:#fab219;--warn-text:#8a5a00;--critical:#d03b3b;
+--banner:#fdecec;--callout:#eef4fc}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])){color-scheme:dark;--page:#0d0d0d;
+--surface-1:#1a1a19;--text-primary:#fff;--text-secondary:#c3c2b7;--text-muted:#898781;--grid:#2c2c2a;--axis:#383835;
+--border:rgba(255,255,255,.10);--series-1:#3987e5;--series-2:#d95926;--series-3:#199e70;--div-neg:#e66767;--good:#0ca30c;--good-text:#0ca30c;
+--warning:#fab219;--warn-text:#fab219;--critical:#e66767;--banner:#3a1a1a;--callout:#16263a}}
+:root[data-theme="dark"]{color-scheme:dark;--page:#0d0d0d;--surface-1:#1a1a19;--text-primary:#fff;
+--text-secondary:#c3c2b7;--text-muted:#898781;--grid:#2c2c2a;--axis:#383835;--border:rgba(255,255,255,.10);
+--series-1:#3987e5;--series-2:#d95926;--series-3:#199e70;--div-neg:#e66767;--good:#0ca30c;--good-text:#0ca30c;--warning:#fab219;
+--warn-text:#fab219;--critical:#e66767;--banner:#3a1a1a;--callout:#16263a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--text-primary);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1180px;margin:0 auto;padding:24px 16px 56px}
+header{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:baseline;justify-content:space-between}
+h1{font-size:24px;margin:0;font-weight:650}
+h2{font-size:17px;margin:28px 0 10px;font-weight:620}
+.sub{color:var(--text-secondary);font-size:13px}
+.badges{display:flex;gap:6px;flex-wrap:wrap}
+.badge{font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;border:1px solid var(--border);
+background:var(--surface-1);color:var(--text-secondary)}
+.badge.live{color:var(--critical);border-color:var(--critical)}
+.banner{background:var(--banner);border:1px solid var(--critical);border-radius:10px;padding:12px 16px;margin:14px 0}
+.card{background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:16px}
+.tile .label{color:var(--text-secondary);font-size:13px}
+.tile .value{font-size:26px;font-weight:620;margin-top:2px}
+.tile .note{color:var(--text-muted);font-size:12px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:12px}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--grid);white-space:nowrap}
+th{color:var(--text-secondary);font-weight:560}
+td.l,th.l{text-align:left}
+td.wrap{white-space:normal;min-width:220px;color:var(--text-secondary)}
+td.wrapn{white-space:normal;min-width:110px}
+.st{font-weight:600;white-space:nowrap}
+.st.ok{color:var(--good-text)} .st.watch{color:var(--warn-text)} .st.bad{color:var(--critical)} .st.wait{color:var(--text-muted)}
+.pos{color:var(--good-text)} .neg{color:var(--critical)}
+.chart{width:100%;height:300px}
+.chart.sm{height:200px}
+.muted{color:var(--text-muted)} .small{font-size:13px}
+select{font:inherit;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface-1);color:var(--text-primary)}
+.row{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.empty{padding:18px;color:var(--text-muted);text-align:center}
+details{margin-top:28px} summary{cursor:pointer;color:var(--text-secondary)}
+dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;font-size:13px} dt{font-weight:600}
+dd{margin:0;color:var(--text-secondary)}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>F1 trading monitor</h1>
+      <div class="sub" id="asof">loading…</div>
+    </div>
+    <div class="badges" id="badges"></div>
+  </header>
+  <div id="banner"></div>
+  <div class="tiles" id="tiles"></div>
+
+  <h2>Is it behaving like the research?</h2>
+  <div class="card tw"><table id="health"></table></div>
+
+  <h2>Growth since start</h2>
+  <div class="card"><div id="eq" class="chart"></div></div>
+  <div class="grid2" style="margin-top:12px">
+    <div class="card"><div class="small muted">Drawdown from peak (main book)</div><div id="dd" class="chart sm"></div></div>
+    <div class="card"><div class="small muted">R per closed trade (main book), most recent last</div><div id="rbars" class="chart sm"></div></div>
+  </div>
+
+  <h2>Open positions</h2>
+  <div class="card tw"><table id="positions"></table></div>
+
+  <div class="row"><h2>Closed trades</h2><select id="bookSel" aria-label="Book"></select></div>
+  <div class="card tw"><table id="trades"></table></div>
+
+  <h2>By market</h2>
+  <div class="card tw"><table id="markets"></table></div>
+
+  <h2>Activity log</h2>
+  <div class="card tw"><table id="events"></table></div>
+
+  <details>
+    <summary>What do these terms mean?</summary>
+    <div class="card" style="margin-top:8px"><dl>
+      <dt>R</dt><dd>Profit or loss divided by the amount risked at the stop. With 1% risk per trade, +1 R ≈ +1% of the account.</dd>
+      <dt>Paper</dt><dd>Simulated trades on real Binance prices. Nothing is sent to Binance and nothing appears on binance.com.</dd>
+      <dt>Live account</dt><dd>Real orders on Binance (or the testnet). Visible on Binance under Futures → Positions and Open Orders.</dd>
+      <dt>Model</dt><dd>In live mode, the paper F1 book keeps running as the backtest's ideal, to compare real fills against.</dd>
+      <dt>Shadow</dt><dd>F1 long-only, paper only: it tests whether dropping short trades would have been better.</dd>
+      <dt>Drawdown</dt><dd>How far equity is below its highest point. New entries pause automatically at the kill-switch limit.</dd>
+      <dt>Stop</dt><dd>The price where a losing trade is closed automatically. In live mode it is an order resting on Binance.</dd>
+    </dl></div>
+  </details>
+</main>
+<script>
+const LABEL = {"F1": "F1 paper", "F1-long": "F1 long-only (shadow)", "F1-live": "F1 live account"};
+const SERIES_COLOR = {"F1": "var(--series-1)", "F1-long": "var(--series-2)", "F1-live": "var(--series-3)"};
+const SIDE = {"1": "LONG", "-1": "SHORT"};
+const STATUS = {ok: "✓ OK", watch: "▲ Watch", bad: "✗ Problem", wait: "… Too early"};
+let DATA = null;
+
+const $ = id => document.getElementById(id);
+function tok(v){ if(typeof v==="string" && v.startsWith("var(")){ return getComputedStyle(document.documentElement)
+  .getPropertyValue(v.slice(4,-1).trim()).trim() || v;} return v; }
+function resolve(o){ if(o instanceof Date) return o; if(Array.isArray(o)) return o.map(resolve); if(o && typeof o==="object"){ const r={};
+  for(const k in o) r[k]=resolve(o[k]); return r;} return tok(o); }
+const money = v => v==null ? "–" : (v<0?"-$":"$") + Math.abs(v).toLocaleString(undefined,{maximumFractionDigits:2});
+const pct = (v, d=1) => v==null ? "–" : (v*100).toFixed(d) + "%";
+const sgnR = v => v==null ? "–" : (v>=0?"+":"") + v.toFixed(2) + " R";
+const px = v => v==null ? "–" : Number(v).toPrecision(6).replace(/\.?0+$/,"");
+const when = ms => { if(ms==null) return "–"; const d = new Date(ms);
+  const o = {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"};
+  if(d.getFullYear() !== new Date().getFullYear()) o.year = "numeric"; return d.toLocaleString(undefined, o); };
+const label = b => LABEL[b] || (b.endsWith("-live") ? b.replace("-live"," live account") : b);
+function dur(ms){ const h = ms/3.6e6; return h >= 48 ? (h/24).toFixed(1)+"d" : Math.round(h)+"h"; }
+
+function el(tag, text, cls){ const e = document.createElement(tag); if(text!=null) e.textContent = text; if(cls) e.className = cls; return e; }
+function table(id, headers, rows, leftCols=1, emptyText="Nothing yet."){
+  const t = $(id); t.replaceChildren();
+  const thead = el("thead"); const tr = el("tr");
+  headers.forEach((h,i) => tr.appendChild(el("th", h, i<leftCols ? "l" : "")));
+  thead.appendChild(tr); t.appendChild(thead);
+  const tb = el("tbody");
+  if(!rows.length){ const r = el("tr"); const c = el("td", emptyText, "empty"); c.colSpan = headers.length; r.appendChild(c); tb.appendChild(r); }
+  rows.forEach(cells => { const r = el("tr"); cells.forEach((c,i) => {
+    const td = el("td", null, (i<leftCols ? "l " : "") + (c && c.cls ? c.cls : ""));
+    td.textContent = c && typeof c === "object" ? c.text : (c==null ? "–" : String(c)); r.appendChild(td); }); tb.appendChild(r); });
+  t.appendChild(tb);
+}
+const signCls = v => v==null ? "" : v>0 ? "pos" : v<0 ? "neg" : "";
+
+function layout(extra){ return Object.assign({paper_bgcolor:"rgba(0,0,0,0)", plot_bgcolor:"rgba(0,0,0,0)",
+  font:{family:'system-ui,-apple-system,"Segoe UI",sans-serif', size:12, color:"var(--text-secondary)"},
+  margin:{l:56,r:16,t:8,b:36}, hovermode:"x unified", showlegend:false,
+  hoverlabel:{bgcolor:"var(--surface-1)", bordercolor:"var(--axis)", font:{color:"var(--text-primary)"}},
+  xaxis:{gridcolor:"var(--grid)", linecolor:"var(--axis)", zeroline:false, tickfont:{color:"var(--text-muted)"}},
+  yaxis:{gridcolor:"var(--grid)", linecolor:"var(--axis)", zeroline:false, tickfont:{color:"var(--text-muted)"}}}, extra||{}); }
+function plot(id, data, lay){ Plotly.react($(id), resolve(data), resolve(layout(lay)), {displayModeBar:false, responsive:true}); }
+
+function render(){
+  const d = DATA;
+  if(!d.ready){ $("asof").textContent = d.message; return; }
+  const live = d.live, main = d.main, mb = live ? null : d.books[main];
+  const mainStats = live ? live.stats : mb.stats;
+  const age = d.data_age_min;
+  $("asof").textContent = (d.source === "replay" ? "Replay of archived data · up to " : "Market data up to ") +
+    when(d.data_ts) + (d.source === "replay" || age==null ? "" : ` (${Math.round(age)} min ago)`) +
+    " · refreshes every 30 s";
+
+  const badges = $("badges"); badges.replaceChildren();
+  const add = (t, cls) => badges.appendChild(el("span", t, "badge " + (cls||"")));
+  add(d.mode === "live" ? (d.env === "mainnet" ? "LIVE · real money" : "LIVE · testnet") : "PAPER", d.mode==="live" && d.env==="mainnet" ? "live" : "");
+  if(d.source === "replay") add("REPLAY");
+  add(d.symbols.length + " markets");
+  if(d.risk_per_trade) add(pct(d.risk_per_trade, 2) + " risk/trade");
+
+  const paused = live ? live.paused : mb.paused, reason = live ? live.paused_reason : mb.paused_reason;
+  $("banner").replaceChildren();
+  if(paused){ const b = el("div", null, "banner"); b.appendChild(el("b", "New entries are paused. "));
+    b.appendChild(document.createTextNode(reason + " Open positions keep their stops. Send /resume in Telegram to continue."));
+    $("banner").appendChild(b); }
+
+  const eq = live ? live.equity : mb.equity, start = live ? null : mb.start_equity;
+  const dd = live ? live.drawdown : mb.drawdown, openN = (live ? live.positions : mb.positions).length;
+  const tiles = [
+    ["Equity", money(eq), live ? "real Binance account" : "paper account"],
+    ["Return since start", start ? pct(eq/start-1) : "–", start ? "from " + money(start) : "see growth chart"],
+    ["Drawdown from peak", pct(dd), "pauses at " + pct(d.kill_switch, 0)],
+    ["Open positions", String(openN), "max " + d.symbols.length + " (one per market)"],
+    ["Closed trades", String(mainStats.n), mainStats.per_week!=null && d.weeks>=1 ? mainStats.per_week.toFixed(1) + " per week" : "since start"],
+    ["Average per trade", mainStats.avg_R!=null ? sgnR(mainStats.avg_R) : "–", mainStats.n ? "win rate " + pct(mainStats.win_rate,0) : "no trades yet"],
+  ];
+  $("tiles").replaceChildren(...tiles.map(([l,v,n]) => { const t = el("div", null, "card tile");
+    t.append(el("div", l, "label"), el("div", v, "value"), el("div", n, "note")); return t; }));
+
+  table("health", ["Check", "Status", "Now", "Research expects", "What it means"],
+    d.health.map(h => [h.name, {text: STATUS[h.status], cls: "st " + h.status}, {text: h.value, cls: "wrapn"},
+      {text: h.expect, cls: "wrapn"}, {text: h.note, cls: "wrap"}]), 1);
+  [...$("health").querySelectorAll("tbody tr")].forEach(r => { r.children[1].classList.remove("l"); r.children[1].style.textAlign="left"; });
+
+  // growth chart: every book indexed to its own start so paper and real accounts share one axis
+  const traces = Object.entries(d.series).map(([book, pts]) => {
+    const base = pts.length ? pts[0][1] : 1;
+    return {type:"scatter", mode:"lines", name: label(book), x: pts.map(p => new Date(p[0])),
+      y: pts.map(p => (p[1]/base - 1)*100), line:{color: SERIES_COLOR[book] || "var(--text-muted)", width:2},
+      hovertemplate: "%{y:+.1f}%<extra>" + label(book) + "</extra>"};
+  });
+  plot("eq", traces, {showlegend: traces.length>1, legend:{orientation:"h", y:1.1, x:0, font:{color:"var(--text-secondary)"}},
+    yaxis:{ticksuffix:"%", gridcolor:"var(--grid)", linecolor:"var(--axis)", zeroline:true, zerolinecolor:"var(--axis)",
+      tickfont:{color:"var(--text-muted)"}}});
+
+  const mainSeries = d.series[live ? live.name + "-live" : main] || [];
+  let peak = -Infinity; const ddy = mainSeries.map(p => { peak = Math.max(peak, p[1]); return -(1 - p[1]/peak)*100; });
+  plot("dd", [{type:"scatter", mode:"lines", x: mainSeries.map(p => new Date(p[0])), y: ddy, fill:"tozeroy",
+    fillcolor:"rgba(128,128,128,0.12)", line:{color:"var(--series-1)", width:2}, hovertemplate:"%{y:.1f}%<extra></extra>"}],
+    {yaxis:{ticksuffix:"%", gridcolor:"var(--grid)", linecolor:"var(--axis)", tickfont:{color:"var(--text-muted)"}},
+     shapes:[{type:"line", xref:"paper", x0:0, x1:1, y0:-d.kill_switch*100, y1:-d.kill_switch*100,
+       line:{color:"var(--critical)", width:1}}],
+     annotations:[{xref:"paper", x:0, y:-d.kill_switch*100, text:"kill switch", showarrow:false, xanchor:"left",
+       yanchor:"bottom", font:{size:11, color:"var(--text-secondary)"}}]});
+
+  const mainTrades = d.trades.filter(t => t.book === (live ? live.name + "-live" : main)).slice().reverse();
+  plot("rbars", [{type:"bar", x: mainTrades.map((t,i) => i+1), y: mainTrades.map(t => t.R),
+    marker:{color: mainTrades.map(t => t.R >= 0 ? "var(--series-1)" : "var(--div-neg)")},
+    customdata: mainTrades.map(t => [t.symbol, SIDE[t.dir]]),
+    hovertemplate:"%{customdata[1]} %{customdata[0]}: %{y:+.2f} R<extra></extra>"}],
+    {hovermode:"closest", bargap:0.25, xaxis:{showticklabels:false, gridcolor:"var(--grid)", linecolor:"var(--axis)"},
+     yaxis:{ticksuffix:" R", gridcolor:"var(--grid)", linecolor:"var(--axis)", zeroline:true, zerolinecolor:"var(--axis)",
+       tickfont:{color:"var(--text-muted)"}}});
+
+  const pos = live ? live.positions : mb.positions;
+  table("positions", ["Market", "Side", "Since", "Entry", "Stop", "Last", "Stop distance", "Open P/L", "Open R"],
+    pos.map(p => [p.symbol, SIDE[p.dir], when(p.since), px(p.entry_px), px(p.stop), px(p.last),
+      p.last ? pct(Math.abs(p.last - p.stop)/p.last) : "–", {text: money(p.upnl), cls: signCls(p.upnl)},
+      {text: sgnR(p.R_open), cls: signCls(p.R_open)}]), 1, "No open positions right now. The bot waits for a 4h breakout.");
+
+  const sel = $("bookSel"), books = [...new Set(d.trades.map(t => t.book))];
+  const cur = sel.value || (live ? live.name + "-live" : main);
+  sel.replaceChildren(...books.map(b => { const o = el("option", label(b)); o.value = b; if(b===cur) o.selected = true; return o; }));
+  const sb = sel.value || cur;
+  table("trades", ["Closed", "Market", "Side", "Entry", "Exit", "Result", "P/L", "Why", "Held"],
+    d.trades.filter(t => t.book === sb).slice(0, 100).map(t => [when(t.exit_time), t.symbol, SIDE[t.dir], px(t.entry_px), px(t.exit_px),
+      {text: sgnR(t.R), cls: signCls(t.R)}, {text: money(t.net), cls: signCls(t.net)}, (t.reason||"").replace("_"," "),
+      dur(t.exit_time - t.entry_time)]), 1, "No closed trades yet.");
+
+  const ms = d.per_symbol[sb] || [];
+  table("markets", ["Market", "Trades", "Win rate", "Average", "Total"],
+    ms.map(m => [m.symbol, m.trades, pct(m.win_rate, 0), {text: sgnR(m.avg_R), cls: signCls(m.avg_R)},
+      {text: sgnR(m.sum_R), cls: signCls(m.sum_R)}]), 1, "No closed trades yet.");
+
+  const describe = e => {
+    const s = SIDE[e.dir] || "";
+    switch(e.kind){
+      case "entry": return `Opened ${s} ${e.symbol} at ${px(e.price)}, stop ${px(e.stop)}`;
+      case "exit": return `Closed ${s} ${e.symbol} at ${px(e.exit_px)}: ${sgnR(e.R)} (${(e.reason||"").replace("_"," ")})`;
+      case "live_entry": return `LIVE: bought/sold ${s} ${e.symbol} at ${px(e.price)} (model ${px(e.model_price)}), stop ${px(e.stop)}`;
+      case "live_exit": return `LIVE: closed ${s} ${e.symbol} at ${px(e.exit_px)}: ${sgnR(e.R)} (${(e.reason||"").replace("_"," ")})`;
+      case "paused": case "live_paused": return "Entries paused: " + e.reason;
+      case "resumed": case "live_resumed": return "Entries resumed";
+      case "skipped": case "live_skipped": return `Skipped ${s} ${e.symbol}: ${e.reason}`;
+      case "live_error": return "ERROR " + (e.symbol||"") + " " + e.msg;
+      case "live_warning": return "Warning: " + e.msg;
+      case "live_ready": return "Connected to Binance";
+      default: return e.kind;
+    }
+  };
+  table("events", ["When", "Book", "What happened"],
+    d.events.slice(0, 60).map(e => [when(e.ts), label(e.book || ""), {text: describe(e), cls: "wrap"}]), 2, "No activity yet.");
+}
+
+async function load(){
+  try{
+    const r = await fetch("/api/data", {cache:"no-store"});
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    DATA = await r.json(); render();
+  }catch(err){ $("asof").textContent = "Could not load data (" + err.message + "). Retrying…"; }
+}
+$("bookSel").addEventListener("change", render);
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => DATA && render());
+load(); setInterval(load, 30000);
+</script>
+</body>
+</html>

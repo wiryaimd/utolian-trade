@@ -4,6 +4,7 @@
     python -m btcq.live check                     # connectivity: Binance REST/WS + Telegram
     python -m btcq.live status                    # print saved state
     python -m btcq.live chat-id                   # find your Telegram chat id
+    python -m btcq.live dashboard                 # web dashboard on http://127.0.0.1:8080
     python -m btcq.live replay --start 2023-06-01 --end 2023-12-31   # archive replay (dev data)
 """
 from __future__ import annotations
@@ -11,7 +12,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import sys
+from pathlib import Path
 from logging.handlers import RotatingFileHandler
 
 import pandas as pd
@@ -112,6 +115,10 @@ def main() -> None:
     sub.add_parser("check")
     sub.add_parser("status")
     sub.add_parser("chat-id", help="print chat ids that recently messaged the bot (Telegram setup)")
+    dp = sub.add_parser("dashboard", help="read-only web dashboard")
+    dp.add_argument("--db", default=None, help="defaults to <STATE_DIR>/bot.sqlite")
+    dp.add_argument("--host", default=os.environ.get("DASHBOARD_HOST", "127.0.0.1"))
+    dp.add_argument("--port", type=int, default=int(os.environ.get("DASHBOARD_PORT", "8080")))
     rp = sub.add_parser("replay")
     rp.add_argument("--start", required=True)
     rp.add_argument("--end", required=True)
@@ -120,6 +127,15 @@ def main() -> None:
     rp.add_argument("--unlock-holdout", action="store_true",
                     help="allow replaying 2024+ archive data (logged in research/holdout_log.jsonl)")
     a = ap.parse_args()
+    if a.cmd == "dashboard":  # needs no trading config
+        from btcq.live.dashboard import serve
+        db = a.db or str(Path(os.environ.get("STATE_DIR", "state")) / "bot.sqlite")
+        srv = serve(db, a.host, a.port, os.environ.get("DASHBOARD_USER", "admin"),
+                    os.environ.get("DASHBOARD_PASSWORD", ""))
+        auth = "password protected" if os.environ.get("DASHBOARD_PASSWORD") else "no password (localhost only)"
+        print(f"dashboard on http://{a.host}:{a.port} reading {db} ({auth})", flush=True)
+        srv.serve_forever()
+        return
     cfg = BotConfig.from_env()
 
     if a.cmd == "run":

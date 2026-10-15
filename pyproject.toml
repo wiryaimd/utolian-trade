@@ -25,5 +25,8 @@ live = ["websockets>=12"]
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"btcq.live" = ["*.html"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

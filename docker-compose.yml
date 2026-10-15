@@ -9,3 +9,17 @@ services:
     logging:
       driver: json-file
       options: {max-size: "10m", max-file: "3"}
+
+  dashboard:
+    build: .
+    container_name: btcq-dashboard
+    command: ["python", "-m", "btcq.live", "dashboard", "--host", "0.0.0.0", "--port", "8080"]
+    env_file: .env              # needs DASHBOARD_PASSWORD
+    volumes:
+      - ./state:/app/state      # opened read-only by the dashboard (SQLite mode=ro)
+    ports:
+      - "127.0.0.1:8080:8080"   # localhost only; reach it via SSH tunnel or your reverse proxy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz')"]
+      interval: 2m

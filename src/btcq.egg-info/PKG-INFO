@@ -13,3 +13,5 @@ Requires-Dist: httpx>=0.27
 Requires-Dist: tqdm>=4.66
 Provides-Extra: dev
 Requires-Dist: pytest>=8; extra == "dev"
+Provides-Extra: live
+Requires-Dist: websockets>=12; extra == "live"

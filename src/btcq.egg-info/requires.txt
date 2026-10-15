@@ -9,3 +9,6 @@ tqdm>=4.66
 
 [dev]
 pytest>=8
+
+[live]
+websockets>=12

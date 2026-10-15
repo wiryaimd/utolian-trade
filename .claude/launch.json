@@ -4,8 +4,28 @@
     {
       "name": "reports",
       "runtimeExecutable": ".venv/Scripts/python.exe",
-      "runtimeArgs": ["-m", "http.server", "8765", "--directory", "reports"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8765",
+        "--directory",
+        "reports"
+      ],
       "port": 8765
+    },
+    {
+      "name": "dashboard",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "-m",
+        "btcq.live",
+        "dashboard",
+        "--db",
+        "state/replay/bot.sqlite",
+        "--port",
+        "8766"
+      ],
+      "port": 8766
     }
   ]
 }

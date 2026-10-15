@@ -16,6 +16,7 @@ from btcq.live.trader import Trader
 
 log = logging.getLogger("btcq.app")
 SIDE = {1: "LONG", -1: "SHORT"}
+SNAP_MS = 15 * 60_000
 HELP = ("<b>Commands</b>\n/status: equity, drawdown, open positions\n/positions: open positions in detail\n"
         "/trades [n]: last n closed trades (default 10)\n/pause: stop opening new positions\n"
         "/resume: allow new positions again\n/close SYMBOL: paper-close a position now\n"
@@ -48,6 +49,7 @@ class App:
         self.day_start_eq: dict[str, float] = {}
         self.stale_alerted = False
         self.pending_decisions: list[tuple] = []
+        self.snap_slot: int | None = None
         if executor:
             executor.on_event = self._on_event
             self.trader.decision_hook = self._on_decision
@@ -83,6 +85,13 @@ class App:
         for name, b in self.trader.books.items():
             self.day_start_eq.setdefault(name, b.equity())
 
+    def _meta_config(self) -> dict:
+        c = self.cfg
+        return {"mode": c.mode, "env": c.binance_env, "symbols": c.symbols, "initial_equity": c.initial_equity,
+                "risk_per_trade": c.risk_per_trade, "max_leverage": c.max_leverage,
+                "max_drawdown_pause": c.max_drawdown_pause, "books": list(self.trader.books),
+                "live_book": self.executor.name if self.executor else None}
+
     def first_minute(self, symbol: str, start_ms: int) -> int:
         last = self.trader.last_minute.get(symbol)
         if last is not None:
@@ -105,7 +114,22 @@ class App:
                 sym, end, d, close = self.pending_decisions.pop(0)
                 await self.executor.on_decision(sym, end, d, close)
             await self.executor.maybe_reconcile()
+        self._snapshot(m.ts)
         await self.flush()
+
+    def _snapshot(self, ts: int) -> None:
+        """Equity snapshot every 15 minutes of market time (for the dashboard)."""
+        slot = ts // SNAP_MS
+        if slot == self.snap_slot:
+            return
+        self.snap_slot = slot
+        t = slot * SNAP_MS
+        for name, b in self.trader.books.items():
+            self.db.add_snapshot(name, t, b.equity(), b.drawdown(), sum(1 for p in b.pos.values() if p.dir))
+        ex = self.executor
+        if ex and not math.isnan(ex.equity):
+            dd = 1 - ex.equity / ex.peak if ex.peak and not math.isnan(ex.peak) else 0.0
+            self.db.add_snapshot(f"{ex.name}-live", t, ex.equity, dd, sum(1 for p in ex.pos.values() if p.dir))
 
     async def flush(self) -> None:
         while self.outbox:
@@ -333,6 +357,8 @@ class App:
         (self.cfg.state_dir / "heartbeat").write_text(str(now_ms()))
 
     async def run_live(self) -> None:
+        self.db.set_meta("source", "live")
+        self.db.set_meta("config", self._meta_config())
         start = now_ms()
         await self.start(start)
         if self.executor:
@@ -364,6 +390,8 @@ class App:
                 t.cancel()
 
     async def run_replay(self, start_ms: int, end_ms: int, save_every: int = 0) -> None:
+        self.db.set_meta("source", "replay")
+        self.db.set_meta("config", self._meta_config())
         await self.start(start_ms)
         starts = {s: self.first_minute(s, start_ms) for s in self.cfg.symbols}
         for i, (s, m, rate) in enumerate(self.feed.merged(starts, end_ms)):

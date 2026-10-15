@@ -14,17 +14,50 @@ CREATE TABLE IF NOT EXISTS trades (
 CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, book TEXT, kind TEXT, data TEXT);
 CREATE TABLE IF NOT EXISTS equity (book TEXT, day_ms INTEGER, equity REAL, PRIMARY KEY (book, day_ms));
+CREATE TABLE IF NOT EXISTS snapshots (
+  book TEXT, ts INTEGER, equity REAL, drawdown REAL, n_open INTEGER, PRIMARY KEY (book, ts));
 """
 TRADE_COLS = ["book", "symbol", "dir", "entry_time", "exit_time", "entry_px", "exit_px", "qty", "init_risk",
               "gross", "fees", "funding", "net", "R", "reason", "eq_before"]
 
 
 class StateDB:
-    def __init__(self, path: Path | str):
+    def __init__(self, path: Path | str, readonly: bool = False):
+        if readonly:  # dashboard: never writes, never creates
+            self.conn = sqlite3.connect(f"file:{Path(path).as_posix()}?mode=ro", uri=True,
+                                        check_same_thread=False)
+            return
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(path))
         self.conn.executescript(SCHEMA)
         self.conn.commit()
+
+    def set_meta(self, key: str, value) -> None:
+        self.conn.execute("INSERT INTO kv(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                          (f"meta:{key}", json.dumps(value)))
+        self.conn.commit()
+
+    def meta(self, key: str, default=None):
+        row = self.conn.execute("SELECT value FROM kv WHERE key=?", (f"meta:{key}",)).fetchone()
+        return json.loads(row[0]) if row else default
+
+    def add_snapshot(self, book: str, ts: int, equity: float, drawdown: float, n_open: int) -> None:
+        """Buffered: committed with the next state save."""
+        self.conn.execute("INSERT OR REPLACE INTO snapshots(book, ts, equity, drawdown, n_open) VALUES(?,?,?,?,?)",
+                          (book, ts, equity, drawdown, n_open))
+
+    def snapshots(self, book: str | None = None) -> list[tuple]:
+        q = "SELECT book, ts, equity, drawdown, n_open FROM snapshots"
+        args = []
+        if book:
+            q += " WHERE book=?"
+            args.append(book)
+        return self.conn.execute(q + " ORDER BY ts", args).fetchall()
+
+    def events(self, limit: int = 100) -> list[dict]:
+        rows = self.conn.execute("SELECT ts, book, kind, data FROM events ORDER BY id DESC LIMIT ?",
+                                 (limit,)).fetchall()
+        return [{"ts": r[0], "book": r[1], "kind": r[2], **json.loads(r[3])} for r in rows]
 
     def save_state(self, state: dict) -> None:
         self.conn.execute("INSERT INTO kv(key, value) VALUES('state', ?) "

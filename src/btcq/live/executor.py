@@ -381,9 +381,10 @@ class LiveExecutor:
 
     def state(self) -> dict:
         return {"pos": {s: asdict(p) for s, p in self.pos.items()}, "paused": self.paused,
-                "paused_reason": self.paused_reason, "peak": self.peak}
+                "paused_reason": self.paused_reason, "peak": self.peak, "equity": self.equity}
 
     def restore(self, st: dict) -> None:
         self.pos = {s: LivePos(**st["pos"][s]) if s in st.get("pos", {}) else LivePos() for s in self.symbols}
         self.paused, self.paused_reason = st.get("paused", False), st.get("paused_reason", "")
         self.peak = st.get("peak", math.nan) if st.get("peak") is not None else math.nan
+        self.equity = st.get("equity", math.nan) if st.get("equity") is not None else math.nan
