@@ -191,7 +191,6 @@ def main() -> None:
             store.unlock_holdout(f"paper-bot replay {a.start}..{a.end} (engineering check, not research)")
             period = "full"
         if a.state_dir:
-            from pathlib import Path
             cfg.state_dir = Path(a.state_dir)
         else:
             cfg.state_dir = cfg.state_dir / "replay"

@@ -90,6 +90,7 @@ class BinanceFeed:
         self.symbols = symbols
         self.base, self.ws_url = ENVS[env]["rest"], ENVS[env]["ws"]
         self.next_rate: dict[str, dict[int, float]] = {s: {} for s in symbols}
+        self.silence_s = 60.0
 
     async def history(self, symbol: str, cutoff_ms: int, tf: str, n: int) -> pd.DataFrame:
         start = cutoff_ms - n * TF_MS[tf]
@@ -128,9 +129,16 @@ class BinanceFeed:
                                               max_size=2**22) as ws:
                     if not first:
                         yield "reconnected", None, None
-                    first, backoff = False, 1
+                    first = False
                     log.info("websocket connected (%d symbols)", len(self.symbols))
-                    async for raw in ws:
+                    while True:
+                        # Mark price arrives every second, so silence means a dead or mis-routed
+                        # connection that is still "open". Drop it; the caller backfills over REST.
+                        try:
+                            raw = await asyncio.wait_for(ws.recv(), timeout=self.silence_s)
+                        except asyncio.TimeoutError:
+                            raise ConnectionError(f"no messages for {self.silence_s:g}s") from None
+                        backoff = 1
                         msg = json.loads(raw).get("data", {})
                         if msg.get("e") == "kline":
                             k = msg["k"]
@@ -145,6 +153,7 @@ class BinanceFeed:
                 log.warning("websocket error: %s; reconnecting in %ss", e, backoff)
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 60)
+                first = False  # the next successful connect triggers a REST catch-up
 
 
 def now_ms() -> int:

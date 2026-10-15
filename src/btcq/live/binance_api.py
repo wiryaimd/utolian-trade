@@ -18,7 +18,9 @@ import httpx
 
 log = logging.getLogger("btcq.binance")
 
-MAINNET = {"rest": "https://fapi.binance.com", "ws": "wss://fstream.binance.com/stream?streams="}
+# Futures market streams moved to the /market path; the old /stream path still accepts
+# connections but no longer sends data (observed 2026-10-15).
+MAINNET = {"rest": "https://fapi.binance.com", "ws": "wss://fstream.binance.com/market/stream?streams="}
 TESTNET = {"rest": "https://testnet.binancefuture.com", "ws": "wss://stream.binancefuture.com/stream?streams="}
 ENVS = {"mainnet": MAINNET, "testnet": TESTNET}
 

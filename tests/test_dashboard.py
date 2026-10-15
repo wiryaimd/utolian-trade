@@ -118,3 +118,23 @@ def test_live_payload_shows_real_account(tmp_path):
     assert p["live"]["stats"]["n"] >= 3 and p["live"]["n_fills"] >= 3
     assert "F1-live" in p["series"] and p["books"]["F1"]["role"] == "model"
     assert any(h["name"] == "Live fills vs model" for h in p["health"])
+
+
+def test_cli_dashboard_without_db_flag(monkeypatch, tmp_path):
+    """Docker runs `python -m btcq.live dashboard` with no --db; this once crashed on startup."""
+    import sys
+
+    import btcq.live.__main__ as cli
+    import btcq.live.dashboard as dash
+    seen = {}
+
+    class FakeServer:
+        def serve_forever(self):
+            seen["served"] = True
+
+    monkeypatch.setattr(dash, "serve", lambda db, host, port, user, pw: seen.update(db=db) or FakeServer())
+    monkeypatch.setenv("STATE_DIR", str(tmp_path))
+    monkeypatch.setenv("DASHBOARD_PASSWORD", "x")
+    monkeypatch.setattr(sys, "argv", ["btcq.live", "dashboard", "--host", "0.0.0.0", "--port", "8080"])
+    cli.main()
+    assert seen["served"] and seen["db"].endswith("bot.sqlite") and str(tmp_path) in seen["db"]
