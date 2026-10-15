@@ -27,6 +27,10 @@ services:
       # DASHBOARD_BIND=0.0.0.0 in .env publishes it on the server's public IP (plain HTTP + password).
       - "${DASHBOARD_BIND:-127.0.0.1}:8080:8080"
     restart: unless-stopped
+    # The VPS has 1 core shared with the bot: a flooded dashboard must not starve trading.
+    cpus: "0.5"
+    mem_limit: 512m
+    pids_limit: 256
     logging:
       driver: json-file
       options: {max-size: "10m", max-file: "3"}

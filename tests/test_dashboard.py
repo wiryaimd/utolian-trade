@@ -318,3 +318,31 @@ def test_locked_database_returns_clean_503(replay_db, tmp_path):
         holder.close()
         srv.shutdown()
         srv.server_close()
+
+
+def test_one_address_cannot_take_every_connection_slot(tmp_path):
+    import socket
+    import time as _t
+
+    from btcq.live.dashboard import DashboardData, QuietServer, make_handler
+
+    class Small(QuietServer):
+        max_connections = 10
+        per_ip_connections = 2
+    srv = Small(("127.0.0.1", 0), make_handler(DashboardData(tmp_path / "x.sqlite"), "admin", "pw"))
+    port = _start(srv)
+    try:
+        held = [socket.create_connection(("127.0.0.1", port)) for _ in range(2)]
+        _t.sleep(0.3)
+        extra = socket.create_connection(("127.0.0.1", port))
+        extra.settimeout(3)
+        assert extra.recv(10) == b""                  # 3rd from the same address: dropped
+        for s_ in held:
+            s_.close()
+        _t.sleep(0.3)
+        ok = urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz", timeout=5).read()
+        assert ok == b"ok"                            # slots are released again
+        extra.close()
+    finally:
+        srv.shutdown()
+        srv.server_close()

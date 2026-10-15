@@ -446,27 +446,53 @@ def _hard_close(request) -> None:
 
 class QuietServer(ThreadingHTTPServer):
     """Internet-facing hardening for the stdlib threaded server:
-      - at most max_connections concurrent connections (extra ones are closed, no thread spawned);
+      - at most max_connections concurrent connections, and per_ip_connections from any one address,
+        so a single source can't take every slot (extra ones are closed, no thread spawned);
       - each connection is cut after request_deadline_s in total (per-read timeouts alone let a
         client trickle bytes forever);
       - client disconnects are silent; other errors log at most one short line per minute."""
     daemon_threads = True
     request_queue_size = 128
     max_connections = 64
+    per_ip_connections = 8
     request_deadline_s = 30
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._slots = threading.BoundedSemaphore(self.max_connections)
+        self._per_ip: dict[str, int] = {}
+        self._per_ip_lock = threading.Lock()
+
+    def _take_ip(self, ip: str) -> bool:
+        with self._per_ip_lock:
+            n = self._per_ip.get(ip, 0)
+            if n >= self.per_ip_connections:
+                return False
+            self._per_ip[ip] = n + 1
+            return True
+
+    def _release_ip(self, ip: str) -> None:
+        with self._per_ip_lock:
+            n = self._per_ip.get(ip, 0) - 1
+            if n > 0:
+                self._per_ip[ip] = n
+            else:
+                self._per_ip.pop(ip, None)
 
     def process_request(self, request, client_address):
+        ip = client_address[0]
+        if not self._take_ip(ip):
+            self.shutdown_request(request)
+            return
         if not self._slots.acquire(blocking=False):
+            self._release_ip(ip)
             self.shutdown_request(request)
             return
         try:
             super().process_request(request, client_address)
         except Exception:
             self._slots.release()
+            self._release_ip(ip)
             raise
 
     def process_request_thread(self, request, client_address):
@@ -478,6 +504,7 @@ class QuietServer(ThreadingHTTPServer):
         finally:
             timer.cancel()
             self._slots.release()
+            self._release_ip(client_address[0])
     _last_log = -1e9
     _suppressed = 0
     _log_lock = threading.Lock()
