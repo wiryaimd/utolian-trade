@@ -1,9 +1,12 @@
-.venv/
+# Leading "/" anchors to the project root. Without it, "data/" would also ignore src/btcq/data/.
+/.venv/
 __pycache__/
 *.pyc
-.pytest_cache/
-data/
+/.pytest_cache/
+/data/
+/state/
 .env
-reports/*.html
-reports/tearsheets/
-state/
+/reports/*.html
+/reports/tearsheets/
+*.egg-info/
+/build/

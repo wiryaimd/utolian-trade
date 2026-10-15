@@ -1,9 +1,10 @@
-.git
-.venv
-data
-reports
-research
-tests
-state
-.env
+# Patterns are relative to the build context root (e.g. "/data" does NOT match src/btcq/data).
+/.git
+/.venv
+/data
+/reports
+/research
+/tests
+/state
+/.env
 **/__pycache__
