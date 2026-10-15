@@ -1,0 +1,242 @@
+{
+ "code": "S1LV",
+ "name": "Donchian trend, long-only + vol-targeted",
+ "tf": "4h",
+ "version": 1,
+ "hypothesis": "Round 2: both changes together (long-only and 30% vol-target sizing).",
+ "rules": "Long when the 4h close crosses above the prior N-bar high; short breakouts are ignored. Initial stop k*ATR(14). Exit by chandelier trail (k*ATR from the extreme since entry) or by the opposite N/2-bar channel. Reverses on an opposite breakout. Long-only. Notional = equity x 0.30 / sigma_30d (cap 3x); stop still active.",
+ "grid": {
+  "n": [
+   20,
+   30,
+   40,
+   55,
+   80
+  ],
+  "k": [
+   2.5,
+   3.5,
+   4.5
+  ],
+  "exit": [
+   "chandelier",
+   "channel"
+  ]
+ },
+ "n_configs": 30,
+ "chosen_cfg": 9,
+ "params": {
+  "n": 30,
+  "k": 3.5,
+  "exit": "channel"
+ },
+ "start": "2017-08-17T04:00:00+00:00",
+ "end": "2023-12-31T00:00:00+00:00",
+ "dev": {
+  "trades": 123,
+  "win_rate": 0.37398373983739835,
+  "avg_R": 0.7318209403942721,
+  "median_R": -0.3459174069147821,
+  "t_stat": 2.6005068572025403,
+  "pf": 2.761244623717921,
+  "total_R": 90.01397566849548,
+  "total_return": 7.048118288629137,
+  "cagr": 0.3867591729737103,
+  "sharpe": 1.4113193500023764,
+  "sortino": 1.7328587417063386,
+  "max_dd": 0.258866534398391,
+  "calmar": 1.494048560091181,
+  "dd_days": 476,
+  "exposure": 0.39405742106393643,
+  "avg_hold_h": 178.98536585365855,
+  "trades_per_year": 19.28479381443299,
+  "long_n": 123,
+  "long_avg_R": 0.7318209403942721,
+  "short_n": 0,
+  "short_avg_R": 0.0,
+  "fees_R": 0.019121154745758033,
+  "funding_R": 0.08511204583902558,
+  "max_year_share": 0.393997556207278,
+  "years_positive": 6,
+  "years": 7
+ },
+ "stress_2x": {
+  "avg_R": 0.7066779821486192,
+  "pf": 2.6492868205299676,
+  "total_return": 6.434402361970396,
+  "sharpe": 1.3598533737571983
+ },
+ "sr_daily": 0.07387183102057146,
+ "T": 2328,
+ "skew": 3.336822450813839,
+ "kurt": 44.75896432528714,
+ "pbo": 0.09665889665889665,
+ "plateau": 1.0,
+ "n_neighbors": 5,
+ "null": {
+  "actual_mean_ret": 0.03461120634702297,
+  "null_mean": 0.012445718137961102,
+  "null_p95": 0.030254261870198175,
+  "p_value": 0.01998001998001998
+ },
+ "bootstrap": {
+  "ret_p5": 1.0157426546971373,
+  "ret_p50": 6.5968773802229475,
+  "mdd_p50": 0.2112532444769113,
+  "mdd_p95": 0.3473783874667838
+ },
+ "benchmark": {
+  "total_return": 8.874728126429378,
+  "cagr": 0.4319523158974259,
+  "sharpe": 0.8615227527949877,
+  "max_dd": 0.8318705353076483
+ },
+ "years": [
+  {
+   "year": 2017,
+   "trades": 7,
+   "win_rate": 0.5714285714285714,
+   "avg_R": 1.9091282320054535,
+   "sum_R": 13.363897624038174,
+   "return": 0.34427225147421114
+  },
+  {
+   "year": 2018,
+   "trades": 18,
+   "win_rate": 0.3888888888888889,
+   "avg_R": 0.02536752548070853,
+   "sum_R": 0.45661545865275355,
+   "return": -0.02570591432707603
+  },
+  {
+   "year": 2019,
+   "trades": 20,
+   "win_rate": 0.3,
+   "avg_R": 0.8923694290281026,
+   "sum_R": 17.84738858056205,
+   "return": 0.5249903265261073
+  },
+  {
+   "year": 2020,
+   "trades": 19,
+   "win_rate": 0.5263157894736842,
+   "avg_R": 1.8665940230467684,
+   "sum_R": 35.4652864378886,
+   "return": 1.2267828995934749
+  },
+  {
+   "year": 2021,
+   "trades": 18,
+   "win_rate": 0.2777777777777778,
+   "avg_R": 0.11592190251271076,
+   "sum_R": 2.0865942452287936,
+   "return": 0.21168162444595717
+  },
+  {
+   "year": 2022,
+   "trades": 21,
+   "win_rate": 0.2857142857142857,
+   "avg_R": -0.24340355635734642,
+   "sum_R": -5.111474683504275,
+   "return": -0.16295321457992673
+  },
+  {
+   "year": 2023,
+   "trades": 20,
+   "win_rate": 0.4,
+   "avg_R": 1.2952834002814684,
+   "sum_R": 25.90566800562937,
+   "return": 0.7841601282934834
+  }
+ ],
+ "runtime_s": 1.282069444656372,
+ "dsr": 0.9765994539870628,
+ "dsr_n_all": 0.7471527279595044,
+ "dsr_prereg": 7.76635806553441e-33,
+ "psr0": 0.9999611921589364,
+ "exp_max_sharpe_ann": 0.70127636380262,
+ "n_trials": 373,
+ "n_eff": 14.849570528171945,
+ "var_sr": 0.009971219405572775,
+ "gates": {
+  "trades>=100": true,
+  "PF>=1.2": true,
+  "t-stat>=2": true,
+  "2x-cost avg_R>0": true,
+  "DSR>=0.95": true,
+  "PBO<=0.5": true,
+  "plateau>=70%": true,
+  "null p<0.05": true,
+  "year share<=50%": true
+ },
+ "dev_pass": true,
+ "holdout": {
+  "trades": 65,
+  "win_rate": 0.3230769230769231,
+  "avg_R": 0.19670026437400273,
+  "median_R": -0.4010686767676778,
+  "t_stat": 0.8645942566788839,
+  "pf": 1.4564107534754804,
+  "total_R": 12.785517184310178,
+  "total_return": 0.3594420896523127,
+  "cagr": 0.11651095605660178,
+  "sharpe": 0.6200888437564225,
+  "sortino": 0.7276781813757788,
+  "max_dd": 0.2996229151620964,
+  "calmar": 0.3888586291658273,
+  "dd_days": 690,
+  "exposure": 0.3861227193269966,
+  "avg_hold_h": 144.99205128205128,
+  "trades_per_year": 23.328416912487707,
+  "long_n": 65,
+  "long_avg_R": 0.19670026437400273,
+  "short_n": 0,
+  "short_avg_R": 0.0,
+  "fees_R": 0.02309153777526196,
+  "funding_R": 0.03609203621586223,
+  "max_year_share": 0.9012821219251388,
+  "years_positive": 2,
+  "years": [
+   {
+    "year": 2024,
+    "trades": 22,
+    "win_rate": 0.4090909090909091,
+    "avg_R": 0.5237890026266092,
+    "sum_R": 11.523358057785403,
+    "return": 0.49201398690568454
+   },
+   {
+    "year": 2025,
+    "trades": 24,
+    "win_rate": 0.2916666666666667,
+    "avg_R": -0.07640444802785838,
+    "sum_R": -1.833706752668601,
+    "return": -0.1145384172461128
+   },
+   {
+    "year": 2026,
+    "trades": 19,
+    "win_rate": 0.2631578947368421,
+    "avg_R": 0.16294030943123036,
+    "sum_R": 3.0958658791933766,
+    "return": 0.029006443309646412
+   }
+  ],
+  "trade_mdd": 0.2818050695954847,
+  "boot_mdd_p95": 0.3026565109089623,
+  "benchmark": {
+   "total_return": 0.879387839078277,
+   "cagr": 0.254134572484533,
+   "sharpe": 0.7157250583468397,
+   "max_dd": 0.5297592444745785
+  }
+ },
+ "holdout_gates": {
+  "holdout trades>=30": true,
+  "holdout avg_R>0": true,
+  "holdout Sharpe>=50% dev": false,
+  "holdout MDD<=boot p95": true
+ },
+ "holdout_status": "contaminated",
+ "final_pass": null
+}

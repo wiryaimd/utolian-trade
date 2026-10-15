@@ -1,0 +1,12 @@
+pyproject.toml
+src/btcq/__init__.py
+src/btcq.egg-info/PKG-INFO
+src/btcq.egg-info/SOURCES.txt
+src/btcq.egg-info/dependency_links.txt
+src/btcq.egg-info/requires.txt
+src/btcq.egg-info/top_level.txt
+src/btcq/backtest/__init__.py
+src/btcq/data/__init__.py
+src/btcq/features/__init__.py
+src/btcq/research/__init__.py
+src/btcq/strategies/__init__.py

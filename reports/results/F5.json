@@ -1,0 +1,202 @@
+{
+ "code": "F5",
+ "name": "OI-flush reversal",
+ "tf": "1h",
+ "version": 1,
+ "round": 3,
+ "hypothesis": "A sharp hourly OI drop together with a large price move marks forced liquidations; the cascade overshoots and price partially reverts once it is done.",
+ "rules": "Trigger: 1h OI change z-score (30 days) <= -z_oi and |1h move| > 1.5 * prior ATR(14). Fade the move: long after a drop, short after a spike. Stop beyond the bar extreme + 0.5*ATR. Exit after H hours, or at a 50% retracement of the move (with the same time cap).",
+ "grid": {
+  "z_oi": [
+   2.5,
+   3.0,
+   4.0
+  ],
+  "H": [
+   4,
+   12
+  ],
+  "exit": [
+   "time",
+   "target"
+  ]
+ },
+ "n_configs": 12,
+ "chosen_cfg": 9,
+ "params": {
+  "z_oi": 4.0,
+  "H": 4,
+  "exit": "target"
+ },
+ "symbols": [
+  "BTCUSDT",
+  "ETHUSDT",
+  "SOLUSDT",
+  "XRPUSDT",
+  "BNBUSDT"
+ ],
+ "holdout_scope": "all",
+ "latency_min": 1,
+ "start": "2021-12-01T00:00:00+00:00",
+ "end": "2023-12-31T00:00:00+00:00",
+ "dev": {
+  "trades": 213,
+  "win_rate": 0.49765258215962443,
+  "avg_R": -0.09014141047788853,
+  "median_R": -0.0038775352732873386,
+  "t_stat": -1.2464922271631669,
+  "pf": 0.7869635036479233,
+  "total_R": -19.200120431790257,
+  "total_return": -0.0751781054219578,
+  "cagr": -0.03679134162936437,
+  "sharpe": -0.4578833300071563,
+  "sortino": -0.26559348091645324,
+  "max_dd": 0.16169947302518195,
+  "calmar": -0.22752913748602474,
+  "dd_days": 758,
+  "exposure": 0.026002883632647102,
+  "avg_hold_h": 2.229655712050078,
+  "trades_per_year": 102.16162943495401,
+  "long_n": 143,
+  "long_avg_R": -0.09344013308360416,
+  "short_n": 70,
+  "short_avg_R": -0.08340259144049801,
+  "fees_R": 0.08121961923092305,
+  "funding_R": 7.186369984848216e-05,
+  "max_year_share": null,
+  "years_positive": 0,
+  "years": 3
+ },
+ "stress_2x": {
+  "avg_R": -0.18937858287503032,
+  "pf": 0.6039109289980022,
+  "total_return": -0.18440073726664274,
+  "sharpe": -1.2282964333978514
+ },
+ "sr_daily": -0.02396670886810115,
+ "T": 761,
+ "skew": -0.14200077933423746,
+ "kurt": 32.73514913094593,
+ "pbo": 0.24794094794094795,
+ "plateau": 0.0,
+ "n_neighbors": 3,
+ "inherited_gates": [],
+ "null": {
+  "actual_mean_ret": -0.0008591472227265751,
+  "null_mean": -0.0012697895095071154,
+  "null_p95": 0.0001369025929032545,
+  "p_value": 0.2977022977022977
+ },
+ "bootstrap": {
+  "ret_p5": -0.21569132994688248,
+  "ret_p50": -0.07174324650201092,
+  "mdd_p50": 0.13588080480510834,
+  "mdd_p95": 0.2432822615516423
+ },
+ "benchmark": {
+  "total_return": -0.3297883421213629,
+  "cagr": -0.17484408789310657,
+  "sharpe": 0.054455256522980854,
+  "max_dd": 0.7650605095429012
+ },
+ "symbol_table": [
+  {
+   "symbol": "BTCUSDT",
+   "trades": 64,
+   "avg_R": -0.24161059455971984,
+   "win_rate": 0.4375,
+   "long_avg_R": -0.1291396991454592,
+   "short_avg_R": -0.4170651914059663,
+   "sharpe": -1.022651128729424
+  },
+  {
+   "symbol": "ETHUSDT",
+   "trades": 40,
+   "avg_R": -0.027067824283336938,
+   "win_rate": 0.425,
+   "long_avg_R": -0.36184679379460305,
+   "short_avg_R": 0.4258684285848465,
+   "sharpe": -0.2102871835958766
+  },
+  {
+   "symbol": "SOLUSDT",
+   "trades": 34,
+   "avg_R": 0.05944056962092263,
+   "win_rate": 0.5588235294117647,
+   "long_avg_R": -0.010771142001854018,
+   "short_avg_R": 0.18816204092934644,
+   "sharpe": 0.2964536839900256
+  },
+  {
+   "symbol": "XRPUSDT",
+   "trades": 43,
+   "avg_R": -0.033749651856280004,
+   "win_rate": 0.5813953488372093,
+   "long_avg_R": 0.022491929699723235,
+   "short_avg_R": -0.3805727381182999,
+   "sharpe": -0.1420431208788666
+  },
+  {
+   "symbol": "BNBUSDT",
+   "trades": 32,
+   "avg_R": -0.1007523045601888,
+   "win_rate": 0.53125,
+   "long_avg_R": -0.02719321735707222,
+   "short_avg_R": -0.2625822964070452,
+   "sharpe": -0.2999745381572625
+  }
+ ],
+ "symbols_positive": 1,
+ "years": [
+  {
+   "year": 2021,
+   "trades": 2,
+   "win_rate": 0.0,
+   "avg_R": -0.5213114060889077,
+   "sum_R": -1.0426228121778154,
+   "return": -0.010417433444213975
+  },
+  {
+   "year": 2022,
+   "trades": 73,
+   "win_rate": 0.4246575342465753,
+   "avg_R": -0.23517785803595923,
+   "sum_R": -17.167983636625024,
+   "return": -0.07411053735429307
+  },
+  {
+   "year": 2023,
+   "trades": 138,
+   "win_rate": 0.5434782608695652,
+   "avg_R": -0.007170391181068258,
+   "sum_R": -0.9895139829874197,
+   "return": 0.009361941931839368
+  }
+ ],
+ "confirm_years": null,
+ "weeks_with_entry": 0.6078947368421053,
+ "runtime_s": 12.254377365112305,
+ "dsr": 0.007549441287559355,
+ "dsr_n_all": 0.0001461973966871066,
+ "dsr_prereg": 6.082510108183913e-19,
+ "psr0": 0.25451921398008537,
+ "exp_max_sharpe_ann": 1.2271018107090246,
+ "n_trials": 373,
+ "n_eff": 14.849570528171945,
+ "var_sr": 0.009971219405572775,
+ "gates": {
+  "trades>=100": true,
+  "PF>=1.2": false,
+  "t-stat>=2": false,
+  "2x-cost avg_R>0": false,
+  "DSR>=0.95": false,
+  "PBO<=0.5": true,
+  "plateau>=70%": false,
+  "null p<0.05": false,
+  "year share<=50%": false,
+  "trades/yr>=52": true,
+  ">=3/5 symbols R>0": false
+ },
+ "dev_pass": false,
+ "dev_pass_ex_freq": false
+}

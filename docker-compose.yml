@@ -1,0 +1,11 @@
+services:
+  bot:
+    build: .
+    container_name: btcq-paper
+    env_file: .env
+    volumes:
+      - ./state:/app/state      # SQLite state, trades, logs, heartbeat
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}

@@ -1,0 +1,242 @@
+{
+ "code": "S1L",
+ "name": "Donchian trend, long-only",
+ "tf": "4h",
+ "version": 1,
+ "hypothesis": "Round 2: S1's edge came mostly from longs, and BTC's positive drift makes shorts costly. Drop the short side.",
+ "rules": "Long when the 4h close crosses above the prior N-bar high; short breakouts are ignored. Initial stop k*ATR(14). Exit by chandelier trail (k*ATR from the extreme since entry) or by the opposite N/2-bar channel. Reverses on an opposite breakout. Long-only.",
+ "grid": {
+  "n": [
+   20,
+   30,
+   40,
+   55,
+   80
+  ],
+  "k": [
+   2.5,
+   3.5,
+   4.5
+  ],
+  "exit": [
+   "chandelier",
+   "channel"
+  ]
+ },
+ "n_configs": 30,
+ "chosen_cfg": 9,
+ "params": {
+  "n": 30,
+  "k": 3.5,
+  "exit": "channel"
+ },
+ "start": "2017-08-17T04:00:00+00:00",
+ "end": "2023-12-31T00:00:00+00:00",
+ "dev": {
+  "trades": 125,
+  "win_rate": 0.376,
+  "avg_R": 0.714140504671912,
+  "median_R": -0.3459174069147821,
+  "t_stat": 2.5756354707297424,
+  "pf": 2.712840355354205,
+  "total_R": 89.267563083989,
+  "total_return": 1.3037596944871686,
+  "cagr": 0.13979150632687065,
+  "sharpe": 1.4150469624357156,
+  "sortino": 1.6220074487903289,
+  "max_dd": 0.10527862941026367,
+  "calmar": 1.3278241473121069,
+  "dd_days": 507,
+  "exposure": 0.39818202429536287,
+  "avg_hold_h": 177.96506666666667,
+  "trades_per_year": 19.598367697594504,
+  "long_n": 125,
+  "long_avg_R": 0.714140504671912,
+  "short_n": 0,
+  "short_avg_R": 0.0,
+  "fees_R": 0.018939841416540502,
+  "funding_R": 0.08395305554008593,
+  "max_year_share": 0.3972919749643041,
+  "years_positive": 6,
+  "years": 7
+ },
+ "stress_2x": {
+  "avg_R": 0.689254218801162,
+  "pf": 2.603869579059077,
+  "total_return": 1.2347830423860158,
+  "sharpe": 1.3660372248813748
+ },
+ "sr_daily": 0.07406694317274691,
+ "T": 2328,
+ "skew": 2.497560813921021,
+ "kurt": 30.58123607218279,
+ "pbo": 0.1560994560994561,
+ "plateau": 1.0,
+ "n_neighbors": 5,
+ "null": {
+  "actual_mean_ret": 0.03317065024893104,
+  "null_mean": 0.01227579478250176,
+  "null_p95": 0.028399956537284995,
+  "p_value": 0.015984015984015984
+ },
+ "bootstrap": {
+  "ret_p5": 0.373593153145381,
+  "ret_p50": 1.253542460850074,
+  "mdd_p50": 0.073719500772772,
+  "mdd_p95": 0.1271563693456889
+ },
+ "benchmark": {
+  "total_return": 8.874728126429378,
+  "cagr": 0.4319523158974259,
+  "sharpe": 0.8615227527949877,
+  "max_dd": 0.8318705353076483
+ },
+ "years": [
+  {
+   "year": 2017,
+   "trades": 9,
+   "win_rate": 0.5555555555555556,
+   "avg_R": 1.4019427821701926,
+   "sum_R": 12.617485039531735,
+   "return": 0.12876112578122
+  },
+  {
+   "year": 2018,
+   "trades": 18,
+   "win_rate": 0.3888888888888889,
+   "avg_R": 0.02536752548070853,
+   "sum_R": 0.45661545865275355,
+   "return": 0.0034399263998909912
+  },
+  {
+   "year": 2019,
+   "trades": 20,
+   "win_rate": 0.3,
+   "avg_R": 0.8923694290281023,
+   "sum_R": 17.847388580562047,
+   "return": 0.18421620285504514
+  },
+  {
+   "year": 2020,
+   "trades": 19,
+   "win_rate": 0.5263157894736842,
+   "avg_R": 1.8665940230467681,
+   "sum_R": 35.465286437888594,
+   "return": 0.349064678577067
+  },
+  {
+   "year": 2021,
+   "trades": 18,
+   "win_rate": 0.2777777777777778,
+   "avg_R": 0.11592190251271085,
+   "sum_R": 2.0865942452287953,
+   "return": 0.05431544579058922
+  },
+  {
+   "year": 2022,
+   "trades": 21,
+   "win_rate": 0.2857142857142857,
+   "avg_R": -0.24340355635734637,
+   "sum_R": -5.111474683504274,
+   "return": -0.05046197133488117
+  },
+  {
+   "year": 2023,
+   "trades": 20,
+   "win_rate": 0.4,
+   "avg_R": 1.2952834002814684,
+   "sum_R": 25.90566800562937,
+   "return": 0.27173625359200804
+  }
+ ],
+ "runtime_s": 1.720130205154419,
+ "dsr": 0.9743167454483462,
+ "dsr_n_all": 0.7450644084811786,
+ "dsr_prereg": 2.9514814018498983e-31,
+ "psr0": 0.9999439306328128,
+ "exp_max_sharpe_ann": 0.70127636380262,
+ "n_trials": 373,
+ "n_eff": 14.849570528171945,
+ "var_sr": 0.009971219405572775,
+ "gates": {
+  "trades>=100": true,
+  "PF>=1.2": true,
+  "t-stat>=2": true,
+  "2x-cost avg_R>0": true,
+  "DSR>=0.95": true,
+  "PBO<=0.5": true,
+  "plateau>=70%": true,
+  "null p<0.05": true,
+  "year share<=50%": true
+ },
+ "dev_pass": true,
+ "holdout": {
+  "trades": 65,
+  "win_rate": 0.3230769230769231,
+  "avg_R": 0.19670026437400276,
+  "median_R": -0.40106867676767777,
+  "t_stat": 0.8645942566788839,
+  "pf": 1.4564107534754804,
+  "total_R": 12.78551718431018,
+  "total_return": 0.12454599838711111,
+  "cagr": 0.043027263958855144,
+  "sharpe": 0.6114714336053343,
+  "sortino": 0.7125415629501025,
+  "max_dd": 0.10992316807529878,
+  "calmar": 0.3914303482354231,
+  "dd_days": 372,
+  "exposure": 0.3861227193269966,
+  "avg_hold_h": 144.99205128205128,
+  "trades_per_year": 23.328416912487707,
+  "long_n": 65,
+  "long_avg_R": 0.19670026437400276,
+  "short_n": 0,
+  "short_avg_R": 0.0,
+  "fees_R": 0.02309153777526196,
+  "funding_R": 0.036092036215862225,
+  "max_year_share": 0.9012821219251388,
+  "years_positive": 2,
+  "years": [
+   {
+    "year": 2024,
+    "trades": 22,
+    "win_rate": 0.4090909090909091,
+    "avg_R": 0.5237890026266093,
+    "sum_R": 11.523358057785405,
+    "return": 0.1170670820573465
+   },
+   {
+    "year": 2025,
+    "trades": 24,
+    "win_rate": 0.2916666666666667,
+    "avg_R": -0.07640444802785835,
+    "sum_R": -1.8337067526686006,
+    "return": -0.019630093979126184
+   },
+   {
+    "year": 2026,
+    "trades": 19,
+    "win_rate": 0.2631578947368421,
+    "avg_R": 0.16294030943123033,
+    "sum_R": 3.095865879193376,
+    "return": 0.02685234428441796
+   }
+  ],
+  "trade_mdd": 0.10157231739187156,
+  "boot_mdd_p95": 0.11010936514243706,
+  "benchmark": {
+   "total_return": 0.879387839078277,
+   "cagr": 0.254134572484533,
+   "sharpe": 0.7157250583468397,
+   "max_dd": 0.5297592444745785
+  }
+ },
+ "holdout_gates": {
+  "holdout trades>=30": true,
+  "holdout avg_R>0": true,
+  "holdout Sharpe>=50% dev": false,
+  "holdout MDD<=boot p95": true
+ },
+ "holdout_status": "contaminated",
+ "final_pass": null
+}

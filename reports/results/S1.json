@@ -1,0 +1,242 @@
+{
+ "code": "S1",
+ "name": "Donchian trend / TSMOM",
+ "tf": "4h",
+ "version": 1,
+ "hypothesis": "Time-series momentum: BTC trends persist and returns are fat-tailed, so breakouts with a wide trailing stop capture outsized moves.",
+ "rules": "Long when the 4h close crosses above the prior N-bar high; short when it crosses below the prior N-bar low. Initial stop k*ATR(14). Exit by chandelier trail (k*ATR from the extreme since entry) or by the opposite N/2-bar channel. Reverses on an opposite breakout.",
+ "grid": {
+  "n": [
+   20,
+   30,
+   40,
+   55,
+   80
+  ],
+  "k": [
+   2.5,
+   3.5,
+   4.5
+  ],
+  "exit": [
+   "chandelier",
+   "channel"
+  ]
+ },
+ "n_configs": 30,
+ "chosen_cfg": 15,
+ "params": {
+  "n": 40,
+  "k": 3.5,
+  "exit": "channel"
+ },
+ "start": "2017-08-17T04:00:00+00:00",
+ "end": "2023-12-31T00:00:00+00:00",
+ "dev": {
+  "trades": 184,
+  "win_rate": 0.3804347826086957,
+  "avg_R": 0.6078944897340759,
+  "median_R": -0.3456588070925134,
+  "t_stat": 2.7530383778911114,
+  "pf": 2.4068623670577494,
+  "total_R": 111.85258611106997,
+  "total_return": 1.827353887806483,
+  "cagr": 0.17698388453739722,
+  "sharpe": 1.4358040430593864,
+  "sortino": 2.0731395822242993,
+  "max_dd": 0.13250938674328805,
+  "calmar": 1.3356328097742247,
+  "dd_days": 735,
+  "exposure": 0.6767055082217608,
+  "avg_hold_h": 205.46838768115944,
+  "trades_per_year": 28.848797250859107,
+  "long_n": 94,
+  "long_avg_R": 0.98081934445994,
+  "short_n": 90,
+  "short_avg_R": 0.21839519702039564,
+  "fees_R": 0.018057653976658518,
+  "funding_R": 0.05068972462801545,
+  "max_year_share": 0.35050506376193113,
+  "years_positive": 5,
+  "years": 7
+ },
+ "stress_2x": {
+  "avg_R": 0.5842734487268817,
+  "pf": 2.315473871036877,
+  "total_return": 1.7095982033516695,
+  "sharpe": 1.3801660143415084
+ },
+ "sr_daily": 0.07515341842890322,
+ "T": 2328,
+ "skew": 2.1283809582565785,
+ "kurt": 26.76268308760712,
+ "pbo": 0.34794094794094793,
+ "plateau": 1.0,
+ "n_neighbors": 5,
+ "null": {
+  "actual_mean_ret": 0.02454962297311267,
+  "null_mean": -0.00011492016813554342,
+  "null_p95": 0.014268838951892316,
+  "p_value": 0.005994005994005994
+ },
+ "bootstrap": {
+  "ret_p5": 0.661384932455391,
+  "ret_p50": 1.7682918050653624,
+  "mdd_p50": 0.08146307075710446,
+  "mdd_p95": 0.1304344559331791
+ },
+ "benchmark": {
+  "total_return": 8.874728126429378,
+  "cagr": 0.4319523158974259,
+  "sharpe": 0.8615227527949877,
+  "max_dd": 0.8318705353076483
+ },
+ "years": [
+  {
+   "year": 2017,
+   "trades": 9,
+   "win_rate": 0.2222222222222222,
+   "avg_R": 0.7825342014779282,
+   "sum_R": 7.042807813301353,
+   "return": 0.06907641153572897
+  },
+  {
+   "year": 2018,
+   "trades": 29,
+   "win_rate": 0.5517241379310345,
+   "avg_R": 0.7009247003640133,
+   "sum_R": 20.326816310556385,
+   "return": 0.21933374020563967
+  },
+  {
+   "year": 2019,
+   "trades": 28,
+   "win_rate": 0.32142857142857145,
+   "avg_R": 0.7751072000055748,
+   "sum_R": 21.703001600156092,
+   "return": 0.2171996723220715
+  },
+  {
+   "year": 2020,
+   "trades": 27,
+   "win_rate": 0.4074074074074074,
+   "avg_R": 1.4520332528443507,
+   "sum_R": 39.20489782679747,
+   "return": 0.42323850276153663
+  },
+  {
+   "year": 2021,
+   "trades": 30,
+   "win_rate": 0.26666666666666666,
+   "avg_R": -0.011152574102721665,
+   "sum_R": -0.33457722308164994,
+   "return": -0.00326301110522742
+  },
+  {
+   "year": 2022,
+   "trades": 33,
+   "win_rate": 0.3333333333333333,
+   "avg_R": -0.06890369381695109,
+   "sum_R": -2.273821895959386,
+   "return": -0.009947587443698502
+  },
+  {
+   "year": 2023,
+   "trades": 28,
+   "win_rate": 0.4642857142857143,
+   "avg_R": 0.9351236314035613,
+   "sum_R": 26.183461679299715,
+   "return": 0.2687339449071917
+  }
+ ],
+ "runtime_s": 2.5047075748443604,
+ "dsr": 0.9762091726659116,
+ "dsr_n_all": 0.7602602088631584,
+ "dsr_prereg": 2.789951171995795e-30,
+ "psr0": 0.9999461354153236,
+ "exp_max_sharpe_ann": 0.70127636380262,
+ "n_trials": 373,
+ "n_eff": 14.849570528171945,
+ "var_sr": 0.009971219405572775,
+ "gates": {
+  "trades>=100": true,
+  "PF>=1.2": true,
+  "t-stat>=2": true,
+  "2x-cost avg_R>0": true,
+  "DSR>=0.95": true,
+  "PBO<=0.5": true,
+  "plateau>=70%": true,
+  "null p<0.05": true,
+  "year share<=50%": true
+ },
+ "dev_pass": true,
+ "holdout": {
+  "trades": 94,
+  "win_rate": 0.3404255319148936,
+  "avg_R": 0.10706976660972191,
+  "median_R": -0.47783820322644377,
+  "t_stat": 0.5772563806636608,
+  "pf": 1.2256691312905408,
+  "total_R": 10.064558061313859,
+  "total_return": 0.09000247614682944,
+  "cagr": 0.03141317899897267,
+  "sharpe": 0.39112289962294094,
+  "sortino": 0.5705662550010249,
+  "max_dd": 0.11728508398018467,
+  "calmar": 0.26783609588649765,
+  "dd_days": 890,
+  "exposure": 0.70461529006883,
+  "avg_hold_h": 182.96010638297872,
+  "trades_per_year": 33.736479842674534,
+  "long_n": 46,
+  "long_avg_R": 0.3626321757385303,
+  "short_n": 48,
+  "short_avg_R": -0.13784420880538603,
+  "fees_R": 0.022494399246222267,
+  "funding_R": 0.014421237875332121,
+  "max_year_share": 0.7648921652488136,
+  "years_positive": 2,
+  "years": [
+   {
+    "year": 2024,
+    "trades": 33,
+    "win_rate": 0.3939393939393939,
+    "avg_R": 0.21984851012715878,
+    "sum_R": 7.25500083419624,
+    "return": 0.07219656696230992
+   },
+   {
+    "year": 2025,
+    "trades": 35,
+    "win_rate": 0.3142857142857143,
+    "avg_R": -0.13967841087637542,
+    "sum_R": -4.88874438067314,
+    "return": -0.05337789669329618
+   },
+   {
+    "year": 2026,
+    "trades": 26,
+    "win_rate": 0.3076923076923077,
+    "avg_R": 0.29608852337656766,
+    "sum_R": 7.69830160779076,
+    "return": 0.07393112967915227
+   }
+  ],
+  "trade_mdd": 0.09443801245354366,
+  "boot_mdd_p95": 0.11401041231815003,
+  "benchmark": {
+   "total_return": 0.879387839078277,
+   "cagr": 0.254134572484533,
+   "sharpe": 0.7157250583468397,
+   "max_dd": 0.5297592444745785
+  }
+ },
+ "holdout_gates": {
+  "holdout trades>=30": true,
+  "holdout avg_R>0": true,
+  "holdout Sharpe>=50% dev": false,
+  "holdout MDD<=boot p95": true
+ },
+ "final_pass": false,
+ "holdout_status": "clean"
+}

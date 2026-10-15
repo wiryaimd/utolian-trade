@@ -1,0 +1,175 @@
+{
+ "code": "S7",
+ "name": "Capitulation / squeeze reversal",
+ "tf": "15m",
+ "version": 1,
+ "hypothesis": "Forced liquidations push price past fair value in a single violent bar; liquidity providers who absorb that flow are paid by the subsequent reversion.",
+ "rules": "Trigger bar: range > k * prior ATR(96) and volume > m * prior 10-day median volume. Big red bar -> long (close must sit >= wick of the range above the low); big green bar -> short (mirror). Stop beyond the bar extreme + 0.25*ATR. Exit at 1R/2R (4h time stop) or a pure 2h time exit.",
+ "grid": {
+  "k": [
+   2.5,
+   3.5
+  ],
+  "m": [
+   3.0,
+   5.0
+  ],
+  "wick": [
+   0.0,
+   0.3
+  ],
+  "exit": [
+   "1R",
+   "2R",
+   "time"
+  ]
+ },
+ "n_configs": 24,
+ "chosen_cfg": 23,
+ "params": {
+  "k": 3.5,
+  "m": 5.0,
+  "wick": 0.3,
+  "exit": "time"
+ },
+ "start": "2017-08-17T04:00:00+00:00",
+ "end": "2023-12-31T00:00:00+00:00",
+ "dev": {
+  "trades": 1247,
+  "win_rate": 0.40096230954290296,
+  "avg_R": -0.22626368593254306,
+  "median_R": -0.2773917949209791,
+  "t_stat": -8.022754391697465,
+  "pf": 0.5757662701786923,
+  "total_R": -282.1508163578812,
+  "total_return": -0.9410308106021028,
+  "cagr": -0.3584210913534225,
+  "sharpe": -2.8808020671597987,
+  "sortino": -2.620143629539465,
+  "max_dd": 0.9414597278493421,
+  "calmar": -0.38070783141430253,
+  "dd_days": 2302,
+  "exposure": 0.029084329729600726,
+  "avg_hold_h": 1.303033948142208,
+  "trades_per_year": 195.51331615120276,
+  "long_n": 760,
+  "long_avg_R": -0.17560946371614555,
+  "short_n": 487,
+  "short_avg_R": -0.305313396167578,
+  "fees_R": 0.1266425045753144,
+  "funding_R": 0.0007357439193872724,
+  "max_year_share": null,
+  "years_positive": 0,
+  "years": 7
+ },
+ "stress_2x": {
+  "avg_R": -0.3720523635278971,
+  "pf": 0.402521450894641,
+  "total_return": -0.990164160091261,
+  "sharpe": -4.420785639819704
+ },
+ "sr_daily": -0.15078807181987783,
+ "T": 2328,
+ "skew": -0.5246202372091869,
+ "kurt": 12.910713213421463,
+ "pbo": 0.0,
+ "plateau": 0.0,
+ "n_neighbors": 4,
+ "null": {
+  "actual_mean_ret": -0.0021943448816856507,
+  "null_mean": -0.001183451973456993,
+  "null_p95": -0.0007241039710819565,
+  "p_value": 1.0
+ },
+ "bootstrap": {
+  "ret_p5": -0.9670508609366872,
+  "ret_p50": -0.9407635088826658,
+  "mdd_p50": 0.9429110058985883,
+  "mdd_p95": 0.9679724389947799
+ },
+ "benchmark": {
+  "total_return": 8.874728126429378,
+  "cagr": 0.4319523158974259,
+  "sharpe": 0.8615227527949877,
+  "max_dd": 0.8318705353076483
+ },
+ "years": [
+  {
+   "year": 2017,
+   "trades": 25,
+   "win_rate": 0.36,
+   "avg_R": -0.09530491648158972,
+   "sum_R": -2.382622912039743,
+   "return": -0.02521101066786846
+  },
+  {
+   "year": 2018,
+   "trades": 88,
+   "win_rate": 0.4318181818181818,
+   "avg_R": -0.1079051964000381,
+   "sum_R": -9.495657283203352,
+   "return": -0.0905174699334913
+  },
+  {
+   "year": 2019,
+   "trades": 197,
+   "win_rate": 0.43147208121827413,
+   "avg_R": -0.17993494221215708,
+   "sum_R": -35.44718361579495,
+   "return": -0.3045084450560186
+  },
+  {
+   "year": 2020,
+   "trades": 278,
+   "win_rate": 0.39568345323741005,
+   "avg_R": -0.20042328411977403,
+   "sum_R": -55.71767298529718,
+   "return": -0.42953935242048336
+  },
+  {
+   "year": 2021,
+   "trades": 119,
+   "win_rate": 0.40336134453781514,
+   "avg_R": -0.2622668844896584,
+   "sum_R": -31.20975925426935,
+   "return": -0.27214088403341063
+  },
+  {
+   "year": 2022,
+   "trades": 198,
+   "win_rate": 0.3484848484848485,
+   "avg_R": -0.3627206289449425,
+   "sum_R": -71.81868453109861,
+   "return": -0.5098714731331182
+  },
+  {
+   "year": 2023,
+   "trades": 342,
+   "win_rate": 0.41228070175438597,
+   "avg_R": -0.22245390577829824,
+   "sum_R": -76.079235776178,
+   "return": -0.5300568494607404
+  }
+ ],
+ "runtime_s": 5.761197805404663,
+ "dsr": 4.661918463511251e-20,
+ "dsr_n_all": 3.6705768840883333e-25,
+ "dsr_prereg": 1.8873728188566513e-104,
+ "psr0": 1.2802765714178276e-13,
+ "exp_max_sharpe_ann": 0.70127636380262,
+ "n_trials": 373,
+ "n_eff": 14.849570528171945,
+ "var_sr": 0.009971219405572775,
+ "gates": {
+  "trades>=100": true,
+  "PF>=1.2": false,
+  "t-stat>=2": false,
+  "2x-cost avg_R>0": false,
+  "DSR>=0.95": false,
+  "PBO<=0.5": true,
+  "plateau>=70%": false,
+  "null p<0.05": false,
+  "year share<=50%": false
+ },
+ "dev_pass": false
+}

@@ -1,0 +1,242 @@
+{
+ "code": "S1V",
+ "name": "Donchian trend, vol-targeted",
+ "tf": "4h",
+ "version": 1,
+ "hypothesis": "Round 2: size positions to a constant 30% annualised volatility (30-day realised) instead of 1% risk at the stop, smoothing risk across volatility regimes.",
+ "rules": "Long when the 4h close crosses above the prior N-bar high; short when it crosses below the prior N-bar low. Initial stop k*ATR(14). Exit by chandelier trail (k*ATR from the extreme since entry) or by the opposite N/2-bar channel. Reverses on an opposite breakout. Notional = equity x 0.30 / sigma_30d (cap 3x); stop still active.",
+ "grid": {
+  "n": [
+   20,
+   30,
+   40,
+   55,
+   80
+  ],
+  "k": [
+   2.5,
+   3.5,
+   4.5
+  ],
+  "exit": [
+   "chandelier",
+   "channel"
+  ]
+ },
+ "n_configs": 30,
+ "chosen_cfg": 15,
+ "params": {
+  "n": 40,
+  "k": 3.5,
+  "exit": "channel"
+ },
+ "start": "2017-08-17T04:00:00+00:00",
+ "end": "2023-12-31T00:00:00+00:00",
+ "dev": {
+  "trades": 181,
+  "win_rate": 0.3867403314917127,
+  "avg_R": 0.6284775645702589,
+  "median_R": -0.3454002072702447,
+  "t_stat": 2.8039020387723466,
+  "pf": 2.46584836241586,
+  "total_R": 113.75443918721686,
+  "total_return": 13.26762663977347,
+  "cagr": 0.5170059291233728,
+  "sharpe": 1.4356732017200522,
+  "sortino": 2.17748749844009,
+  "max_dd": 0.2866979257496589,
+  "calmar": 1.8033124159217533,
+  "dd_days": 525,
+  "exposure": 0.6692414858833918,
+  "avg_hold_h": 206.57007366482503,
+  "trades_per_year": 28.378436426116842,
+  "long_n": 93,
+  "long_avg_R": 0.9987632095121558,
+  "short_n": 88,
+  "short_avg_R": 0.2371529625293902,
+  "fees_R": 0.018234855821391727,
+  "funding_R": 0.05145203245475251,
+  "max_year_share": 0.34464499237936647,
+  "years_positive": 5,
+  "years": 7
+ },
+ "stress_2x": {
+  "avg_R": 0.6046037841690194,
+  "pf": 2.3713885726257407,
+  "total_return": 11.714857629076942,
+  "sharpe": 1.378071772001838
+ },
+ "sr_daily": 0.07514656988019609,
+ "T": 2328,
+ "skew": 2.7490568473581125,
+ "kurt": 33.5537578558152,
+ "pbo": 0.12478632478632479,
+ "plateau": 1.0,
+ "n_neighbors": 5,
+ "null": {
+  "actual_mean_ret": 0.026488244012161304,
+  "null_mean": -0.0005256485114543578,
+  "null_p95": 0.014932959925681262,
+  "p_value": 0.004995004995004995
+ },
+ "bootstrap": {
+  "ret_p5": 2.862536968395387,
+  "ret_p50": 12.534221506138325,
+  "mdd_p50": 0.22130806931093827,
+  "mdd_p95": 0.33061777348499594
+ },
+ "benchmark": {
+  "total_return": 8.874728126429378,
+  "cagr": 0.4319523158974259,
+  "sharpe": 0.8615227527949877,
+  "max_dd": 0.8318705353076483
+ },
+ "years": [
+  {
+   "year": 2017,
+   "trades": 6,
+   "win_rate": 0.3333333333333333,
+   "avg_R": 1.4907768149080391,
+   "sum_R": 8.944660889448235,
+   "return": 0.2662947848196999
+  },
+  {
+   "year": 2018,
+   "trades": 29,
+   "win_rate": 0.5517241379310345,
+   "avg_R": 0.7009247003640131,
+   "sum_R": 20.32681631055638,
+   "return": 0.5120288165845368
+  },
+  {
+   "year": 2019,
+   "trades": 28,
+   "win_rate": 0.32142857142857145,
+   "avg_R": 0.7751072000055748,
+   "sum_R": 21.703001600156092,
+   "return": 0.5106676702166071
+  },
+  {
+   "year": 2020,
+   "trades": 27,
+   "win_rate": 0.4074074074074074,
+   "avg_R": 1.4520332528443505,
+   "sum_R": 39.20489782679746,
+   "return": 1.5405881875532148
+  },
+  {
+   "year": 2021,
+   "trades": 30,
+   "win_rate": 0.26666666666666666,
+   "avg_R": -0.01115257410272165,
+   "sum_R": -0.3345772230816495,
+   "return": 0.0065754409403520064
+  },
+  {
+   "year": 2022,
+   "trades": 33,
+   "win_rate": 0.3333333333333333,
+   "avg_R": -0.06890369381695112,
+   "sum_R": -2.273821895959387,
+   "return": 0.05185916585485706
+  },
+  {
+   "year": 2023,
+   "trades": 28,
+   "win_rate": 0.4642857142857143,
+   "avg_R": 0.9351236314035614,
+   "sum_R": 26.183461679299718,
+   "return": 0.8337904828105889
+  }
+ ],
+ "runtime_s": 1.4162507057189941,
+ "dsr": 0.9785134546176617,
+ "dsr_n_all": 0.7649190948232569,
+ "dsr_prereg": 1.5648847360340554e-31,
+ "psr0": 0.9999619981470318,
+ "exp_max_sharpe_ann": 0.70127636380262,
+ "n_trials": 373,
+ "n_eff": 14.849570528171945,
+ "var_sr": 0.009971219405572775,
+ "gates": {
+  "trades>=100": true,
+  "PF>=1.2": true,
+  "t-stat>=2": true,
+  "2x-cost avg_R>0": true,
+  "DSR>=0.95": true,
+  "PBO<=0.5": true,
+  "plateau>=70%": true,
+  "null p<0.05": true,
+  "year share<=50%": true
+ },
+ "dev_pass": true,
+ "holdout": {
+  "trades": 94,
+  "win_rate": 0.3404255319148936,
+  "avg_R": 0.10706976660972192,
+  "median_R": -0.47783820322644377,
+  "t_stat": 0.5772563806636608,
+  "pf": 1.2256691312905408,
+  "total_R": 10.06455806131386,
+  "total_return": 0.42423461503476934,
+  "cagr": 0.1353250419730898,
+  "sharpe": 0.5821675465926456,
+  "sortino": 0.8808004049286697,
+  "max_dd": 0.3151908265901172,
+  "calmar": 0.42934321229174033,
+  "dd_days": 635,
+  "exposure": 0.70461529006883,
+  "avg_hold_h": 182.96010638297872,
+  "trades_per_year": 33.736479842674534,
+  "long_n": 46,
+  "long_avg_R": 0.3626321757385301,
+  "short_n": 48,
+  "short_avg_R": -0.13784420880538598,
+  "fees_R": 0.022494399246222263,
+  "funding_R": 0.014421237875332124,
+  "max_year_share": 0.7648921652488135,
+  "years_positive": 2,
+  "years": [
+   {
+    "year": 2024,
+    "trades": 33,
+    "win_rate": 0.3939393939393939,
+    "avg_R": 0.21984851012715875,
+    "sum_R": 7.255000834196239,
+    "return": 0.31733887375104897
+   },
+   {
+    "year": 2025,
+    "trades": 35,
+    "win_rate": 0.3142857142857143,
+    "avg_R": -0.13967841087637542,
+    "sum_R": -4.888744380673139,
+    "return": -0.13778014915729953
+   },
+   {
+    "year": 2026,
+    "trades": 26,
+    "win_rate": 0.3076923076923077,
+    "avg_R": 0.29608852337656766,
+    "sum_R": 7.69830160779076,
+    "return": 0.2539089772267751
+   }
+  ],
+  "trade_mdd": 0.26930874030096275,
+  "boot_mdd_p95": 0.29555818280127355,
+  "benchmark": {
+   "total_return": 0.879387839078277,
+   "cagr": 0.254134572484533,
+   "sharpe": 0.7157250583468397,
+   "max_dd": 0.5297592444745785
+  }
+ },
+ "holdout_gates": {
+  "holdout trades>=30": true,
+  "holdout avg_R>0": true,
+  "holdout Sharpe>=50% dev": false,
+  "holdout MDD<=boot p95": true
+ },
+ "holdout_status": "contaminated",
+ "final_pass": null
+}

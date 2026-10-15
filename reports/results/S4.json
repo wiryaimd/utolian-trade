@@ -1,0 +1,175 @@
+{
+ "code": "S4",
+ "name": "Asia-range session breakout",
+ "tf": "15m",
+ "version": 1,
+ "hypothesis": "Participation and information flow jump when Europe and the US open; a break of the quiet Asia-session range tends to continue intraday.",
+ "rules": "Asia range = high/low of 00:00-08:00 UTC. From 08:00 until end_h UTC, the first 15m close outside the range enters in that direction (max one trade per day). Stop at range midpoint or the opposite side. Target 1R/2R or none; always flat at 24:00 UTC. Optional filter: only trade when today's range is narrower than the 20-day median.",
+ "grid": {
+  "end_h": [
+   16,
+   20
+  ],
+  "stop": [
+   "mid",
+   "opposite"
+  ],
+  "target": [
+   "1R",
+   "2R",
+   "eod"
+  ],
+  "filter": [
+   "none",
+   "narrow"
+  ]
+ },
+ "n_configs": 24,
+ "chosen_cfg": 11,
+ "params": {
+  "end_h": 16,
+  "stop": "opposite",
+  "target": "eod",
+  "filter": "narrow"
+ },
+ "start": "2017-08-17T04:00:00+00:00",
+ "end": "2023-12-31T00:00:00+00:00",
+ "dev": {
+  "trades": 996,
+  "win_rate": 0.41967871485943775,
+  "avg_R": 0.03282230987611532,
+  "median_R": -0.21078415134913192,
+  "t_stat": 0.8151906511868233,
+  "pf": 1.0753229861928266,
+  "total_R": 32.69102063661086,
+  "total_return": 0.2831817209152727,
+  "cagr": 0.03986789536058133,
+  "sharpe": 0.3221766109249455,
+  "sortino": 0.5707051016040564,
+  "max_dd": 0.30178923109451805,
+  "calmar": 0.13210509604994822,
+  "dd_days": 802,
+  "exposure": 0.1879764206104866,
+  "avg_hold_h": 10.544042838018742,
+  "trades_per_year": 156.159793814433,
+  "long_n": 501,
+  "long_avg_R": 0.1390458608697636,
+  "short_n": 495,
+  "short_avg_R": -0.07468879931139538,
+  "fees_R": 0.06880422681563512,
+  "funding_R": 0.00040828498761688234,
+  "max_year_share": 0.6335155823401891,
+  "years_positive": 4,
+  "years": 7
+ },
+ "stress_2x": {
+  "avg_R": -0.049001900143099485,
+  "pf": 0.898687669366412,
+  "total_return": -0.43053382800144735,
+  "sharpe": -0.4690139690560288
+ },
+ "sr_daily": 0.016863494545715608,
+ "T": 2328,
+ "skew": 3.799020845644014,
+ "kurt": 36.53571511711083,
+ "pbo": 0.0027195027195027195,
+ "plateau": 0.75,
+ "n_neighbors": 4,
+ "null": {
+  "actual_mean_ret": 0.0007697549958626433,
+  "null_mean": -0.0011439922533279367,
+  "null_p95": 0.00016025354698662964,
+  "p_value": 0.012987012987012988
+ },
+ "bootstrap": {
+  "ret_p5": -0.30592640192830434,
+  "ret_p50": 0.28632357044098833,
+  "mdd_p50": 0.28157943302186433,
+  "mdd_p95": 0.47648678966006053
+ },
+ "benchmark": {
+  "total_return": 8.874728126429378,
+  "cagr": 0.4319523158974259,
+  "sharpe": 0.8615227527949877,
+  "max_dd": 0.8318705353076483
+ },
+ "years": [
+  {
+   "year": 2017,
+   "trades": 46,
+   "win_rate": 0.5652173913043478,
+   "avg_R": 0.40348644807519135,
+   "sum_R": 18.560376611458803,
+   "return": 0.20029217997796667
+  },
+  {
+   "year": 2018,
+   "trades": 175,
+   "win_rate": 0.5085714285714286,
+   "avg_R": 0.1183444055765581,
+   "sum_R": 20.710270975897668,
+   "return": 0.2178110448974322
+  },
+  {
+   "year": 2019,
+   "trades": 163,
+   "win_rate": 0.3803680981595092,
+   "avg_R": 0.02075036233761235,
+   "sum_R": 3.3823090610308126,
+   "return": 0.02096997304071979
+  },
+  {
+   "year": 2020,
+   "trades": 149,
+   "win_rate": 0.38926174496644295,
+   "avg_R": -0.008076196879866207,
+   "sum_R": -1.2033533351000647,
+   "return": -0.022216432428669997
+  },
+  {
+   "year": 2021,
+   "trades": 161,
+   "win_rate": 0.40372670807453415,
+   "avg_R": -0.06626749404169421,
+   "sum_R": -10.669066540712768,
+   "return": -0.10912677432252937
+  },
+  {
+   "year": 2022,
+   "trades": 159,
+   "win_rate": 0.4088050314465409,
+   "avg_R": -0.04914743240863598,
+   "sum_R": -7.81444175297312,
+   "return": -0.08776180114861132
+  },
+  {
+   "year": 2023,
+   "trades": 143,
+   "win_rate": 0.3706293706293706,
+   "avg_R": 0.06800647284622051,
+   "sum_R": 9.724925617009532,
+   "return": 0.08203526349084367
+  }
+ ],
+ "runtime_s": 3.256871223449707,
+ "dsr": 0.16155400881946042,
+ "dsr_n_all": 0.013236278368161703,
+ "dsr_prereg": 3.3955431524144303e-44,
+ "psr0": 0.7994689346122253,
+ "exp_max_sharpe_ann": 0.70127636380262,
+ "n_trials": 373,
+ "n_eff": 14.849570528171945,
+ "var_sr": 0.009971219405572775,
+ "gates": {
+  "trades>=100": true,
+  "PF>=1.2": false,
+  "t-stat>=2": false,
+  "2x-cost avg_R>0": false,
+  "DSR>=0.95": false,
+  "PBO<=0.5": true,
+  "plateau>=70%": true,
+  "null p<0.05": true,
+  "year share<=50%": false
+ },
+ "dev_pass": false
+}

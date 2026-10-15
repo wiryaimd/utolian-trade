@@ -1,0 +1,175 @@
+{
+ "code": "S8",
+ "name": "Range-regime VWAP mean reversion",
+ "tf": "15m",
+ "version": 1,
+ "hypothesis": "When the higher timeframe is not trending, short-term deviations from VWAP are liquidity-driven and revert; trading them as a liquidity provider earns the spread.",
+ "rules": "Only when 4h ADX(14) < adx_max. Deviation = (close - rolling 24h VWAP) / VW std. Long when deviation crosses below -z, short above +z. Target = VWAP at signal time; stop = stop_mult * distance-to-VWAP beyond entry; 4h time stop. Maker variant posts a limit at the signal close that must be traded through to fill.",
+ "grid": {
+  "z": [
+   2.0,
+   2.5,
+   3.0
+  ],
+  "adx_max": [
+   20,
+   25
+  ],
+  "maker": [
+   false,
+   true
+  ],
+  "stop_mult": [
+   1.0,
+   1.5
+  ]
+ },
+ "n_configs": 24,
+ "chosen_cfg": 19,
+ "params": {
+  "z": 3.0,
+  "adx_max": 20,
+  "maker": true,
+  "stop_mult": 1.5
+ },
+ "start": "2017-08-17T04:00:00+00:00",
+ "end": "2023-12-31T00:00:00+00:00",
+ "dev": {
+  "trades": 144,
+  "win_rate": 0.4513888888888889,
+  "avg_R": -0.09858151547542714,
+  "median_R": -0.0459710955613464,
+  "t_stat": -2.5533967376071525,
+  "pf": 0.5626486298375689,
+  "total_R": -14.195738228461508,
+  "total_return": -0.13373819466434,
+  "cagr": -0.022258152480667093,
+  "sharpe": -0.9762917979985132,
+  "sortino": -0.31055173763965843,
+  "max_dd": 0.1390978145045787,
+  "calmar": -0.16001798849207957,
+  "dd_days": 2323,
+  "exposure": 0.00881721199971361,
+  "avg_hold_h": 3.4208333333333334,
+  "trades_per_year": 22.577319587628867,
+  "long_n": 70,
+  "long_avg_R": -0.15540374445108068,
+  "short_n": 74,
+  "short_avg_R": -0.04483075833629543,
+  "fees_R": 0.02901516352578072,
+  "funding_R": -0.0007056674948167542,
+  "max_year_share": null,
+  "years_positive": 1,
+  "years": 7
+ },
+ "stress_2x": {
+  "avg_R": -0.13174032201356806,
+  "pf": 0.45980173631399207,
+  "total_return": -0.17419316875074198,
+  "sharpe": -1.2737360357719532
+ },
+ "sr_daily": -0.05110144825010343,
+ "T": 2328,
+ "skew": -4.479229771708342,
+ "kurt": 55.39192754618137,
+ "pbo": 0.0,
+ "plateau": 0.0,
+ "n_neighbors": 4,
+ "null": {
+  "actual_mean_ret": -0.0033823269500131326,
+  "null_mean": -0.0012670786588642813,
+  "null_p95": 0.0008529753095246718,
+  "p_value": 0.958041958041958
+ },
+ "bootstrap": {
+  "ret_p5": -0.19883997078650667,
+  "ret_p50": -0.13286012824913784,
+  "mdd_p50": 0.1419490386345098,
+  "mdd_p95": 0.20498706473067144
+ },
+ "benchmark": {
+  "total_return": 8.874728126429378,
+  "cagr": 0.4319523158974259,
+  "sharpe": 0.8615227527949877,
+  "max_dd": 0.8318705353076483
+ },
+ "years": [
+  {
+   "year": 2017,
+   "trades": 22,
+   "win_rate": 0.45454545454545453,
+   "avg_R": -0.20232247822987998,
+   "sum_R": -4.451094521057359,
+   "return": -0.0438197418608286
+  },
+  {
+   "year": 2018,
+   "trades": 41,
+   "win_rate": 0.4634146341463415,
+   "avg_R": -0.062482604799067865,
+   "sum_R": -2.5617867967617824,
+   "return": -0.025554785392780444
+  },
+  {
+   "year": 2019,
+   "trades": 32,
+   "win_rate": 0.46875,
+   "avg_R": -0.10440743184492639,
+   "sum_R": -3.3410378190376444,
+   "return": -0.03325416045378682
+  },
+  {
+   "year": 2020,
+   "trades": 4,
+   "win_rate": 0.5,
+   "avg_R": -0.05655481891771308,
+   "sum_R": -0.22621927567085232,
+   "return": -0.0023397259413739935
+  },
+  {
+   "year": 2021,
+   "trades": 13,
+   "win_rate": 0.38461538461538464,
+   "avg_R": 0.03843526859857093,
+   "sum_R": 0.49965849178142213,
+   "return": 0.004938149989896168
+  },
+  {
+   "year": 2022,
+   "trades": 25,
+   "win_rate": 0.44,
+   "avg_R": -0.1017839173360379,
+   "sum_R": -2.544597933400947,
+   "return": -0.025458748151576005
+  },
+  {
+   "year": 2023,
+   "trades": 7,
+   "win_rate": 0.42857142857142855,
+   "avg_R": -0.22438005347347775,
+   "sum_R": -1.5706603743143444,
+   "return": -0.015722824303943228
+  }
+ ],
+ "runtime_s": 3.1187291145324707,
+ "dsr": 1.2010139138224758e-06,
+ "dsr_n_all": 7.507528690034418e-10,
+ "dsr_prereg": 7.878479244055703e-78,
+ "psr0": 0.0030281006780732036,
+ "exp_max_sharpe_ann": 0.70127636380262,
+ "n_trials": 373,
+ "n_eff": 14.849570528171945,
+ "var_sr": 0.009971219405572775,
+ "gates": {
+  "trades>=100": true,
+  "PF>=1.2": false,
+  "t-stat>=2": false,
+  "2x-cost avg_R>0": false,
+  "DSR>=0.95": false,
+  "PBO<=0.5": true,
+  "plateau>=70%": false,
+  "null p<0.05": false,
+  "year share<=50%": false
+ },
+ "dev_pass": false
+}

@@ -1,0 +1,147 @@
+{
+ "code": "S6",
+ "name": "Funding crowding contrarian",
+ "tf": "4h",
+ "version": 1,
+ "hypothesis": "Extreme funding means leveraged traders are crowded on one side; when price is also stretched and starts to turn, the crowded side gets squeezed.",
+ "rules": "Funding percentile = rank of the latest settled funding vs the last 90 days (270 settlements). Short when percentile >= p, close is >= stretch*ATR above EMA(20) and the bar closes red; long on the mirror image. Stop beyond the 3-bar extreme + 0.5*ATR. Exit at 1.5R/2.5R (3-day time stop) or a pure 2-day time exit.",
+ "grid": {
+  "p": [
+   0.85,
+   0.9,
+   0.95
+  ],
+  "stretch": [
+   1.0,
+   2.0
+  ],
+  "exit": [
+   "1.5R",
+   "2.5R",
+   "time"
+  ]
+ },
+ "n_configs": 18,
+ "chosen_cfg": 14,
+ "params": {
+  "p": 0.95,
+  "stretch": 1.0,
+  "exit": "time"
+ },
+ "start": "2020-01-01T00:00:00+00:00",
+ "end": "2023-12-31T00:00:00+00:00",
+ "dev": {
+  "trades": 136,
+  "win_rate": 0.49264705882352944,
+  "avg_R": 0.22565740176610724,
+  "median_R": -0.060210901514397265,
+  "t_stat": 1.7819433561925067,
+  "pf": 1.5111659119980105,
+  "total_R": 30.689406640190583,
+  "total_return": 0.3392083904704879,
+  "cagr": 0.07569793445108841,
+  "sharpe": 0.9052829643139562,
+  "sortino": 0.6967237636850404,
+  "max_dd": 0.07884113619586408,
+  "calmar": 0.960132465151605,
+  "dd_days": 427,
+  "exposure": 0.1352270134610997,
+  "avg_hold_h": 34.86470588235294,
+  "trades_per_year": 33.97672826830938,
+  "long_n": 31,
+  "long_avg_R": 0.5168490897842444,
+  "short_n": 105,
+  "short_avg_R": 0.13968652244646668,
+  "fees_R": 0.038100594433934334,
+  "funding_R": -0.02450356673118871,
+  "max_year_share": 0.6959301957921964,
+  "years_positive": 3,
+  "years": 4
+ },
+ "stress_2x": {
+  "avg_R": 0.17872410283911516,
+  "pf": 1.3860904372670215,
+  "total_return": 0.25680896046909685,
+  "sharpe": 0.7185531636415642
+ },
+ "sr_daily": 0.04738467602353074,
+ "T": 1461,
+ "skew": 2.502677044635142,
+ "kurt": 32.795889680950985,
+ "pbo": 0.11864801864801865,
+ "plateau": 1.0,
+ "n_neighbors": 3,
+ "null": {
+  "actual_mean_ret": 0.0013377681882439782,
+  "null_mean": -0.0025248858607427394,
+  "null_p95": 0.0031246724049895347,
+  "p_value": 0.13886113886113885
+ },
+ "bootstrap": {
+  "ret_p5": 0.032375258311114624,
+  "ret_p50": 0.33796022462291664,
+  "mdd_p50": 0.08463733428210535,
+  "mdd_p95": 0.15219463187985863
+ },
+ "benchmark": {
+  "total_return": 4.878928582841153,
+  "cagr": 0.5566569218336306,
+  "sharpe": 1.0013210238942871,
+  "max_dd": 0.7666956183209539
+ },
+ "years": [
+  {
+   "year": 2020,
+   "trades": 14,
+   "win_rate": 0.6428571428571429,
+   "avg_R": 0.6237984475645865,
+   "sum_R": 8.733178265904211,
+   "return": 0.08834712264313005
+  },
+  {
+   "year": 2021,
+   "trades": 31,
+   "win_rate": 0.3870967741935484,
+   "avg_R": -0.0012392319098742729,
+   "sum_R": -0.03841618920610246,
+   "return": -0.0035773285601470306
+  },
+  {
+   "year": 2022,
+   "trades": 47,
+   "win_rate": 0.5319148936170213,
+   "avg_R": 0.4544188249330673,
+   "sum_R": 21.357684771854164,
+   "return": 0.22986249227416633
+  },
+  {
+   "year": 2023,
+   "trades": 44,
+   "win_rate": 0.4772727272727273,
+   "avg_R": 0.01447635890087061,
+   "sum_R": 0.6369597916383068,
+   "return": 0.004108332342410703
+  }
+ ],
+ "runtime_s": 0.7946667671203613,
+ "dsr": 0.5167733673218239,
+ "dsr_n_all": 0.11206703621773384,
+ "dsr_prereg": 6.632364923707297e-24,
+ "psr0": 0.9718876443852529,
+ "exp_max_sharpe_ann": 0.885341791797421,
+ "n_trials": 373,
+ "n_eff": 14.849570528171945,
+ "var_sr": 0.009971219405572775,
+ "gates": {
+  "trades>=100": true,
+  "PF>=1.2": true,
+  "t-stat>=2": false,
+  "2x-cost avg_R>0": true,
+  "DSR>=0.95": false,
+  "PBO<=0.5": true,
+  "plateau>=70%": true,
+  "null p<0.05": false,
+  "year share<=50%": false
+ },
+ "dev_pass": false
+}

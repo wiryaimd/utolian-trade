@@ -1,0 +1,6 @@
+{
+ "code": "F7",
+ "formed": false,
+ "components": [],
+ "reason": "needs at least two families passing every dev gate except frequency"
+}

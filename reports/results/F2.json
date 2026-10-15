@@ -1,0 +1,238 @@
+{
+ "code": "F2",
+ "name": "1h Donchian trend, 5 markets",
+ "tf": "1h",
+ "version": 1,
+ "round": 3,
+ "hypothesis": "Time-series momentum at a faster horizon: the same breakout logic on 1h bars trades roughly 4x as often as the 4h version.",
+ "rules": "Long when the 1h close crosses above the prior n-bar high, short below the prior n-bar low. Initial stop k*ATR(14); exit by chandelier trail or the opposite n/2-bar channel.",
+ "grid": {
+  "n": [
+   24,
+   48,
+   96
+  ],
+  "k": [
+   2.5,
+   3.5
+  ],
+  "exit": [
+   "chandelier",
+   "channel"
+  ]
+ },
+ "n_configs": 12,
+ "chosen_cfg": 11,
+ "params": {
+  "n": 96,
+  "k": 3.5,
+  "exit": "channel"
+ },
+ "symbols": [
+  "BTCUSDT",
+  "ETHUSDT",
+  "SOLUSDT",
+  "XRPUSDT",
+  "BNBUSDT"
+ ],
+ "holdout_scope": "alts",
+ "latency_min": 1,
+ "start": "2020-01-01T00:00:00+00:00",
+ "end": "2023-12-31T00:00:00+00:00",
+ "dev": {
+  "trades": 1181,
+  "win_rate": 0.29635901778154106,
+  "avg_R": 0.267093042005463,
+  "median_R": -0.8740433290209055,
+  "t_stat": 2.5440234120813185,
+  "pf": 1.435407458939694,
+  "total_R": 315.4368826084518,
+  "total_return": 4.396744312660653,
+  "cagr": 0.5237288181360269,
+  "sharpe": 0.9815799396403951,
+  "sortino": 1.8132685086814402,
+  "max_dd": 0.42821840315734305,
+  "calmar": 1.2230413599099565,
+  "dd_days": 345,
+  "exposure": 2.9727669404517454,
+  "avg_hold_h": 88.26172734970365,
+  "trades_per_year": 295.0479123887748,
+  "long_n": 628,
+  "long_avg_R": 0.5410205615740202,
+  "short_n": 553,
+  "short_avg_R": -0.04398558781199453,
+  "fees_R": 0.027240414824238925,
+  "funding_R": 0.04684204170155777,
+  "max_year_share": 0.38582328814763134,
+  "years_positive": 4,
+  "years": 4
+ },
+ "stress_2x": {
+  "avg_R": 0.22998226550528508,
+  "pf": 1.3617467435181587,
+  "total_return": 2.5432447490543733,
+  "sharpe": 0.8095578312905645
+ },
+ "sr_daily": 0.05137824223424404,
+ "T": 1461,
+ "skew": 2.463316428556752,
+ "kurt": 25.84843688737489,
+ "pbo": 0.0,
+ "plateau": 0.3333333333333333,
+ "n_neighbors": 3,
+ "inherited_gates": [],
+ "null": {
+  "actual_mean_ret": 0.009071430019911668,
+  "null_mean": -0.0006279278745006205,
+  "null_p95": 0.004911685491796596,
+  "p_value": 0.000999000999000999
+ },
+ "bootstrap": {
+  "ret_p5": 0.29112096458399894,
+  "ret_p50": 8.296967020495025,
+  "mdd_p50": 0.4701593241258149,
+  "mdd_p95": 0.6852068918412024
+ },
+ "benchmark": {
+  "total_return": 23.501168434972406,
+  "cagr": 1.2248293185443848,
+  "sharpe": 1.3936635562231217,
+  "max_dd": 0.7904586654566805
+ },
+ "symbol_table": [
+  {
+   "symbol": "BTCUSDT",
+   "trades": 236,
+   "avg_R": 0.35163539031919533,
+   "win_rate": 0.3093220338983051,
+   "long_avg_R": 0.746876099748814,
+   "short_avg_R": -0.05723430909075497,
+   "sharpe": 0.8070476767479496
+  },
+  {
+   "symbol": "ETHUSDT",
+   "trades": 255,
+   "avg_R": 0.1820106826861432,
+   "win_rate": 0.2784313725490196,
+   "long_avg_R": 0.46265352572695456,
+   "short_avg_R": -0.15964147405919224,
+   "sharpe": 0.5278450593527914
+  },
+  {
+   "symbol": "SOLUSDT",
+   "trades": 207,
+   "avg_R": 0.27490963859233974,
+   "win_rate": 0.34299516908212563,
+   "long_avg_R": 0.48412444212345085,
+   "short_avg_R": 0.037655737680770233,
+   "sharpe": 1.0662480811211816
+  },
+  {
+   "symbol": "XRPUSDT",
+   "trades": 230,
+   "avg_R": 0.22821812603447636,
+   "win_rate": 0.2565217391304348,
+   "long_avg_R": 0.3561103865415162,
+   "short_avg_R": 0.07327173349710112,
+   "sharpe": 0.5603533103076689
+  },
+  {
+   "symbol": "BNBUSDT",
+   "trades": 253,
+   "avg_R": 0.3029317874767243,
+   "win_rate": 0.30039525691699603,
+   "long_avg_R": 0.6609143163563846,
+   "short_avg_R": -0.08759460766472332,
+   "sharpe": 0.5357466778282277
+  }
+ ],
+ "symbols_positive": 5,
+ "years": [
+  {
+   "year": 2020,
+   "trades": 245,
+   "win_rate": 0.32653061224489793,
+   "avg_R": 0.49674651122869906,
+   "sum_R": 121.70289525103126,
+   "return": 1.3765197934575335
+  },
+  {
+   "year": 2021,
+   "trades": 312,
+   "win_rate": 0.2948717948717949,
+   "avg_R": 0.3733453600193755,
+   "sum_R": 116.48375232604516,
+   "return": 1.0696967322947781
+  },
+  {
+   "year": 2022,
+   "trades": 325,
+   "win_rate": 0.3046153846153846,
+   "avg_R": 0.007719256481416392,
+   "sum_R": 2.5087583564603273,
+   "return": -0.07748120284270898
+  },
+  {
+   "year": 2023,
+   "trades": 299,
+   "win_rate": 0.26421404682274247,
+   "avg_R": 0.24997149389603682,
+   "sum_R": 74.741476674915,
+   "return": 0.18934669119093894
+  }
+ ],
+ "confirm_years": 2.4738600960952155,
+ "weeks_with_entry": 0.9780821917808219,
+ "runtime_s": 13.62331771850586,
+ "dev_scope": {
+  "trades": 945,
+  "win_rate": 0.2931216931216931,
+  "avg_R": 0.245979820627642,
+  "median_R": -0.8630373179471277,
+  "t_stat": 2.0694671650427057,
+  "pf": 1.4013971492742914,
+  "total_R": 232.4509304931217,
+  "total_return": 3.9402451201376687,
+  "cagr": 0.49045343823083876,
+  "sharpe": 0.9413982892539599,
+  "sortino": 1.7442803042399264,
+  "max_dd": 0.46350728170370015,
+  "calmar": 1.0581353467157915,
+  "dd_days": 345,
+  "exposure": 2.3560860141455624,
+  "avg_hold_h": 87.42201058201059,
+  "trades_per_year": 236.088295687885,
+  "long_n": 508,
+  "long_avg_R": 0.49239326909178555,
+  "short_n": 437,
+  "short_avg_R": -0.040468764772323584,
+  "fees_R": 0.025189229069975394,
+  "funding_R": 0.04566607479078295,
+  "max_year_share": 0.49334453841260195,
+  "years_positive": 4,
+  "years": 4
+ },
+ "dsr": 0.5808400935455145,
+ "dsr_n_all": 0.1445124268187586,
+ "dsr_prereg": 1.982890731691911e-23,
+ "psr0": 0.9812892448631378,
+ "exp_max_sharpe_ann": 0.885341791797421,
+ "n_trials": 373,
+ "n_eff": 14.849570528171945,
+ "var_sr": 0.009971219405572775,
+ "gates": {
+  "trades>=100": true,
+  "PF>=1.2": true,
+  "t-stat>=2": true,
+  "2x-cost avg_R>0": true,
+  "DSR>=0.95": false,
+  "PBO<=0.5": true,
+  "plateau>=70%": false,
+  "null p<0.05": true,
+  "year share<=50%": true,
+  "trades/yr>=52": true,
+  ">=3/5 symbols R>0": true
+ },
+ "dev_pass": false,
+ "dev_pass_ex_freq": false
+}

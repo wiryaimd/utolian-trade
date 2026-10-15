@@ -1,0 +1,206 @@
+{
+ "code": "F6",
+ "name": "Premium dislocation",
+ "tf": "1h",
+ "version": 1,
+ "round": 3,
+ "hypothesis": "When the perp trades unusually rich or cheap to the spot index, arbitrage and funding pressure pull it back, mostly through the perp price itself.",
+ "rules": "Premium = Binance 1h premium index (perp vs spot index), known at each hour's close. Short when its 30-day z-score crosses above z (perp rich), long when it crosses below -z. Stop 2*ATR(14), exit after H hours.",
+ "grid": {
+  "z": [
+   2.0,
+   2.5,
+   3.0
+  ],
+  "H": [
+   4,
+   8,
+   24
+  ]
+ },
+ "n_configs": 9,
+ "chosen_cfg": 5,
+ "params": {
+  "z": 2.5,
+  "H": 24
+ },
+ "symbols": [
+  "BTCUSDT",
+  "ETHUSDT",
+  "SOLUSDT",
+  "XRPUSDT",
+  "BNBUSDT"
+ ],
+ "holdout_scope": "all",
+ "latency_min": 1,
+ "start": "2020-01-01T00:00:00+00:00",
+ "end": "2023-12-31T00:00:00+00:00",
+ "dev": {
+  "trades": 1798,
+  "win_rate": 0.41434927697441604,
+  "avg_R": -0.024846865769519052,
+  "median_R": -0.721250443351017,
+  "t_stat": -0.8007183947314623,
+  "pf": 0.9539451914538342,
+  "total_R": -44.67466465359526,
+  "total_return": -0.4076358966374142,
+  "cagr": -0.12262330012131506,
+  "sharpe": -0.2034464735317209,
+  "sortino": -0.2699832247496333,
+  "max_dd": 0.6772101443846865,
+  "calmar": -0.1810712688492442,
+  "dd_days": 1297,
+  "exposure": 0.7844997718457677,
+  "avg_hold_h": 15.29905450500556,
+  "trades_per_year": 449.19233401779604,
+  "long_n": 806,
+  "long_avg_R": 0.045804622684984975,
+  "short_n": 992,
+  "short_avg_R": -0.0822512001388036,
+  "fees_R": 0.040180373257677225,
+  "funding_R": -0.019055978625820355,
+  "max_year_share": null,
+  "years_positive": 1,
+  "years": 4
+ },
+ "stress_2x": {
+  "avg_R": -0.07653268919767878,
+  "pf": 0.8652540039745675,
+  "total_return": -0.7568014303595161,
+  "sharpe": -0.8379611149828289
+ },
+ "sr_daily": -0.010648875121312138,
+ "T": 1461,
+ "skew": 1.5134957482100455,
+ "kurt": 21.637793822123307,
+ "pbo": 0.7673659673659674,
+ "plateau": 0.0,
+ "n_neighbors": 3,
+ "inherited_gates": [],
+ "null": {
+  "actual_mean_ret": -0.0005536312811502914,
+  "null_mean": -0.0014618164269521604,
+  "null_p95": 0.0001534526961927257,
+  "p_value": 0.17382617382617382
+ },
+ "bootstrap": {
+  "ret_p5": -0.7800429492374014,
+  "ret_p50": -0.37082946086243834,
+  "mdd_p50": 0.6126822688625424,
+  "mdd_p95": 0.8281909586815178
+ },
+ "benchmark": {
+  "total_return": 23.501168434972406,
+  "cagr": 1.2248293185443848,
+  "sharpe": 1.3936635562231217,
+  "max_dd": 0.7904586654566805
+ },
+ "symbol_table": [
+  {
+   "symbol": "BTCUSDT",
+   "trades": 334,
+   "avg_R": 0.03582664305408949,
+   "win_rate": 0.4341317365269461,
+   "long_avg_R": 0.018414873752360422,
+   "short_avg_R": 0.04637415715032919,
+   "sharpe": 0.2662966461804437
+  },
+  {
+   "symbol": "ETHUSDT",
+   "trades": 382,
+   "avg_R": -0.06251113052410387,
+   "win_rate": 0.4031413612565445,
+   "long_avg_R": -0.03312684417764213,
+   "short_avg_R": -0.07913011214628303,
+   "sharpe": -0.4535210152457492
+  },
+  {
+   "symbol": "SOLUSDT",
+   "trades": 312,
+   "avg_R": -0.07549184909454335,
+   "win_rate": 0.391025641025641,
+   "long_avg_R": -0.027343301553822596,
+   "short_avg_R": -0.13313447643202597,
+   "sharpe": -0.5770449252939942
+  },
+  {
+   "symbol": "XRPUSDT",
+   "trades": 395,
+   "avg_R": 0.004763023803397752,
+   "win_rate": 0.42025316455696204,
+   "long_avg_R": 0.08500050345240505,
+   "short_avg_R": -0.05586084970918554,
+   "sharpe": 0.17227026711414983
+  },
+  {
+   "symbol": "BNBUSDT",
+   "trades": 375,
+   "avg_R": -0.029571864155461484,
+   "win_rate": 0.42133333333333334,
+   "long_avg_R": 0.14538629685671334,
+   "short_avg_R": -0.23385827181129565,
+   "sharpe": -0.12855662728376438
+  }
+ ],
+ "symbols_positive": 2,
+ "years": [
+  {
+   "year": 2020,
+   "trades": 434,
+   "win_rate": 0.41013824884792627,
+   "avg_R": 0.03801151132982313,
+   "sum_R": 16.496995917143238,
+   "return": 0.16002170265656512
+  },
+  {
+   "year": 2021,
+   "trades": 458,
+   "win_rate": 0.40611353711790393,
+   "avg_R": -0.08036786182076285,
+   "sum_R": -36.80848071390938,
+   "return": -0.3267060002288116
+  },
+  {
+   "year": 2022,
+   "trades": 518,
+   "win_rate": 0.42857142857142855,
+   "avg_R": -0.030603313876965757,
+   "sum_R": -15.852516588268262,
+   "return": -0.15343715325792895
+  },
+  {
+   "year": 2023,
+   "trades": 388,
+   "win_rate": 0.4097938144329897,
+   "avg_R": -0.021934699145775362,
+   "sum_R": -8.51066326856084,
+   "return": -0.10410178838275896
+  }
+ ],
+ "confirm_years": null,
+ "weeks_with_entry": 0.8917808219178082,
+ "runtime_s": 12.885620594024658,
+ "dsr": 0.015401198554468115,
+ "dsr_n_all": 0.0004152643814936774,
+ "dsr_prereg": 1.6928700656154066e-31,
+ "psr0": 0.34327663096697847,
+ "exp_max_sharpe_ann": 0.885341791797421,
+ "n_trials": 373,
+ "n_eff": 14.849570528171945,
+ "var_sr": 0.009971219405572775,
+ "gates": {
+  "trades>=100": true,
+  "PF>=1.2": false,
+  "t-stat>=2": false,
+  "2x-cost avg_R>0": false,
+  "DSR>=0.95": false,
+  "PBO<=0.5": false,
+  "plateau>=70%": false,
+  "null p<0.05": false,
+  "year share<=50%": false,
+  "trades/yr>=52": true,
+  ">=3/5 symbols R>0": false
+ },
+ "dev_pass": false,
+ "dev_pass_ex_freq": false
+}

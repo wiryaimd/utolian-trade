@@ -1,0 +1,202 @@
+{
+ "code": "F4",
+ "name": "OI-confirmed breakout",
+ "tf": "1h",
+ "version": 1,
+ "round": 3,
+ "hypothesis": "A breakout backed by rising open interest is new leverage entering in the breakout's direction and tends to continue; one on falling OI is mostly covering and fades.",
+ "rules": "Long when the 1h close crosses above the prior N-hour high and OI grew over the same N hours by more than oi_thr standard deviations (0 = any growth); short on the mirror breakdown (also with rising OI = new shorts). Stop 2*ATR(14); exit by 3*ATR chandelier trail or after 2N hours.",
+ "grid": {
+  "N": [
+   12,
+   24,
+   48
+  ],
+  "oi_thr": [
+   0.0,
+   1.0
+  ],
+  "exit": [
+   "chandelier",
+   "time"
+  ]
+ },
+ "n_configs": 12,
+ "chosen_cfg": 11,
+ "params": {
+  "N": 48,
+  "oi_thr": 1.0,
+  "exit": "time"
+ },
+ "symbols": [
+  "BTCUSDT",
+  "ETHUSDT",
+  "SOLUSDT",
+  "XRPUSDT",
+  "BNBUSDT"
+ ],
+ "holdout_scope": "all",
+ "latency_min": 1,
+ "start": "2021-12-01T00:00:00+00:00",
+ "end": "2023-12-31T00:00:00+00:00",
+ "dev": {
+  "trades": 305,
+  "win_rate": 0.2262295081967213,
+  "avg_R": 0.36952406126499204,
+  "median_R": -1.0485180735034696,
+  "t_stat": 1.7571671935823072,
+  "pf": 1.4530731451315875,
+  "total_R": 112.70483868582258,
+  "total_return": 0.5372537764578826,
+  "cagr": 0.22904889971918885,
+  "sharpe": 0.7832334350774369,
+  "sortino": 1.3337630172563333,
+  "max_dd": 0.22219001736520771,
+  "calmar": 1.030869444250087,
+  "dd_days": 216,
+  "exposure": 0.6264609797050664,
+  "avg_hold_h": 37.513715846994536,
+  "trades_per_year": 146.28777923784494,
+  "long_n": 196,
+  "long_avg_R": 0.12077070513030302,
+  "short_n": 109,
+  "short_avg_R": 0.8168236741310387,
+  "fees_R": 0.05259580614755269,
+  "funding_R": 0.01668990719359008,
+  "max_year_share": 0.7312781337985901,
+  "years_positive": 3,
+  "years": 3
+ },
+ "stress_2x": {
+  "avg_R": 0.29512183442051665,
+  "pf": 1.342521631400926,
+  "total_return": 0.28649504164646244,
+  "sharpe": 0.5254516650305855
+ },
+ "sr_daily": 0.04099631168920399,
+ "T": 761,
+ "skew": 2.652589057986853,
+ "kurt": 18.33036824599939,
+ "pbo": 0.25757575757575757,
+ "plateau": 0.6666666666666666,
+ "n_neighbors": 3,
+ "inherited_gates": [],
+ "null": {
+  "actual_mean_ret": 0.0037959827105336044,
+  "null_mean": -0.0012310284715357864,
+  "null_p95": 0.003973328829596029,
+  "p_value": 0.057942057942057944
+ },
+ "bootstrap": {
+  "ret_p5": -0.17710435287805132,
+  "ret_p50": 0.6806079302118676,
+  "mdd_p50": 0.2715653657914335,
+  "mdd_p95": 0.4522444543478251
+ },
+ "benchmark": {
+  "total_return": -0.3297883421213629,
+  "cagr": -0.17484408789310657,
+  "sharpe": 0.054455256522980854,
+  "max_dd": 0.7650605095429012
+ },
+ "symbol_table": [
+  {
+   "symbol": "BTCUSDT",
+   "trades": 54,
+   "avg_R": 1.0421373669710459,
+   "win_rate": 0.2777777777777778,
+   "long_avg_R": 1.1656838733175636,
+   "short_avg_R": 0.8321083061819662,
+   "sharpe": 1.2250208253431996
+  },
+  {
+   "symbol": "ETHUSDT",
+   "trades": 63,
+   "avg_R": 0.04965113172714304,
+   "win_rate": 0.1746031746031746,
+   "long_avg_R": -0.05028898796487717,
+   "short_avg_R": 0.22346003553935212,
+   "sharpe": -0.48553941681768775
+  },
+  {
+   "symbol": "SOLUSDT",
+   "trades": 62,
+   "avg_R": 0.6239624612550908,
+   "win_rate": 0.2903225806451613,
+   "long_avg_R": 0.002801664851212053,
+   "short_avg_R": 1.3782291426026578,
+   "sharpe": 1.1045939661182804
+  },
+  {
+   "symbol": "XRPUSDT",
+   "trades": 54,
+   "avg_R": -0.14176021542088155,
+   "win_rate": 0.16666666666666666,
+   "long_avg_R": -0.029315856574408987,
+   "short_avg_R": -0.8967437676757681,
+   "sharpe": -0.24614822097871186
+  },
+  {
+   "symbol": "BNBUSDT",
+   "trades": 72,
+   "avg_R": 0.309316369520668,
+   "win_rate": 0.2222222222222222,
+   "long_avg_R": -0.3089767149904065,
+   "short_avg_R": 1.1270588361320888,
+   "sharpe": 0.11723589526190994
+  }
+ ],
+ "symbols_positive": 4,
+ "years": [
+  {
+   "year": 2021,
+   "trades": 6,
+   "win_rate": 0.3333333333333333,
+   "avg_R": 0.016442137012973812,
+   "sum_R": 0.09865282207784287,
+   "return": 0.001324683162571283
+  },
+  {
+   "year": 2022,
+   "trades": 164,
+   "win_rate": 0.1951219512195122,
+   "avg_R": 0.184070742436008,
+   "sum_R": 30.18760175950531,
+   "return": 0.13152970515383533
+  },
+  {
+   "year": 2023,
+   "trades": 135,
+   "win_rate": 0.25925925925925924,
+   "avg_R": 0.6105080304017738,
+   "sum_R": 82.41858410423947,
+   "return": 0.35676517306881195
+  }
+ ],
+ "confirm_years": 2.7010063855008752,
+ "weeks_with_entry": 0.8473684210526315,
+ "runtime_s": 12.414435148239136,
+ "dsr": 0.24961900099796985,
+ "dsr_n_all": 0.026565093081199084,
+ "dsr_prereg": 6.149823058398253e-14,
+ "psr0": 0.8834273435889403,
+ "exp_max_sharpe_ann": 1.2271018107090246,
+ "n_trials": 373,
+ "n_eff": 14.849570528171945,
+ "var_sr": 0.009971219405572775,
+ "gates": {
+  "trades>=100": true,
+  "PF>=1.2": true,
+  "t-stat>=2": false,
+  "2x-cost avg_R>0": true,
+  "DSR>=0.95": false,
+  "PBO<=0.5": true,
+  "plateau>=70%": false,
+  "null p<0.05": false,
+  "year share<=50%": false,
+  "trades/yr>=52": true,
+  ">=3/5 symbols R>0": true
+ },
+ "dev_pass": false,
+ "dev_pass_ex_freq": false
+}
