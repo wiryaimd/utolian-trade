@@ -269,3 +269,58 @@ def power_table(sharpes=(0.0, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0), n_sims: int = 40_
         out.append({"sharpe_ann": s_ann, "p_dev_pass": k["dev"] / n_sims, "p_replicated": k["rep"] / n_sims,
                     "p_strict": k["strict"] / n_sims})
     return out
+
+
+def power_table_td(sharpes=(0.0, 0.25, 0.4, 0.5, 0.6, 0.75, 1.0), n_sims: int = 20_000, dev_days: int = 7560,
+                   hold_days: int = 2709, n_dsr: float = 17.849570528171945, ramp=None, hurdles=(0.25, 0.45, 0.6, 0.75),
+                   seed: int = 6, chunk: int = 1000) -> list[dict]:
+    """Round 6 protocol power on trading days (252 a year, 5-day weeks) under iid Gaussian returns.
+
+    sharpes are full-book annual Sharpes. ramp: optional weight per dev day, the share of the book that is
+    live (the mean scales with w and the s.d. with sqrt(w), as for independent markets); the holdout is the
+    full book. Dev pass = weekly t >= 2; REPLICATED adds holdout mean > 0 and holdout Sharpe >= 50% of dev;
+    STRICT adds DSR >= 0.95 at n_dsr over dev + holdout. A funding cost of h full-book annual Sharpe units
+    (scaled by w): p_funding_h = P(dev mean - cost > 0), the funding gate alone; p_dev_hurdle_h = P(dev pass and
+    that gate). min_sharpe_dev ~ 2 sqrt(252 / sum(w)) is the realized full-book Sharpe a dev pass needs, so a
+    hurdle below it never binds."""
+    from scipy.stats import norm
+    rng = np.random.default_rng(seed)
+    w = np.ones(dev_days) if ramp is None else np.asarray(ramp, np.float64)[:dev_days]
+    if w.shape[0] != dev_days:
+        raise ValueError("ramp needs one weight per dev day")
+    wt = np.r_[w, np.ones(hold_days)]
+    T = dev_days + hold_days
+    sr_star = expected_max_sr(null_sr_variance(T), n_dsr)
+    weeks = dev_days // 5
+    out = []
+    for s_ann in sharpes:
+        mu = s_ann / np.sqrt(252) * 0.01
+        k = {"dev": 0, "rep": 0, "strict": 0} | {h: 0 for h in hurdles} | {("f", h): 0 for h in hurdles}
+        for start in range(0, n_sims, chunk):
+            m = min(chunk, n_sims - start)
+            r = wt * mu + np.sqrt(wt) * rng.normal(0.0, 0.01, size=(m, T))
+            d = r[:, :dev_days]
+            wk = d[:, : weeks * 5].reshape(m, weeks, 5).sum(axis=2)
+            t_w = wk.mean(1) / wk.std(1, ddof=1) * np.sqrt(weeks)
+            dev = t_w >= 2.0
+            dev_sr = d.mean(1) / d.std(1, ddof=1)
+            h = r[:, dev_days:]
+            h_sr = h.mean(1) / h.std(1, ddof=1)
+            rep = dev & (h.mean(1) > 0) & (h_sr >= 0.5 * dev_sr)
+            sr_all = r.mean(1) / r.std(1, ddof=1)
+            z = (sr_all - sr_star) * np.sqrt(T - 1) / np.sqrt(1 + 0.5 * sr_all ** 2)
+            strict = rep & (norm.cdf(z) >= 0.95)
+            k["dev"] += int(dev.sum()); k["rep"] += int(rep.sum()); k["strict"] += int(strict.sum())
+            for hh in hurdles:
+                cost = hh / np.sqrt(252) * 0.01 * w.sum()
+                fund = d.sum(1) - cost > 0
+                k[hh] += int((dev & fund).sum())
+                k[("f", hh)] += int(fund.sum())
+        out.append({"variant": "constant" if ramp is None else "ramp", "sharpe_ann": s_ann,
+                    "p_dev_pass": k["dev"] / n_sims, "p_replicated": k["rep"] / n_sims,
+                    "p_strict": k["strict"] / n_sims,
+                    **{f"p_funding_{hh:g}": k[("f", hh)] / n_sims for hh in hurdles},
+                    **{f"p_dev_hurdle_{hh:g}": k[hh] / n_sims for hh in hurdles},
+                    "full_book_years_dev": float(w.sum() / 252),
+                    "min_sharpe_dev": float(2 * np.sqrt(252 / w.sum()))})
+    return out

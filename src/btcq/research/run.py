@@ -287,7 +287,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["download", "sweep", "gates", "validate", "report", "r3-sweep",
                                     "r3-validate", "r4-symbols", "r4-universe", "r4-download", "r4-sweep",
-                                    "r4-validate", "r5-power", "r5-download-spot", "r5-sweep", "r5-validate"])
+                                    "r4-validate", "r5-power", "r5-download-spot", "r5-sweep", "r5-validate",
+                                    "r6-power", "r6-download", "r6-sweep", "r6-validate"])
     ap.add_argument("--strategy", default="all")
     ap.add_argument("--finalists", action="store_true")
     ap.add_argument("--unlock-holdout", action="store_true")
@@ -296,6 +297,7 @@ def main() -> None:
     ap.add_argument("--stage", default="A", choices=["A", "B"], help="r4-download")
     ap.add_argument("--keep-raw", action="store_true", help="r4-download: keep raw kline zips")
     ap.add_argument("--rerun", action="store_true", help="r4-sweep: overwrite results (needs a version bump)")
+    ap.add_argument("--resume", action="store_true", help="r6-download: fill missing markets only")
     a = ap.parse_args()
     codes = [s.code for s in ALL] if a.strategy == "all" else a.strategy.split(",")
     if a.cmd == "download":
@@ -355,6 +357,19 @@ def main() -> None:
                 raise SystemExit("r5-validate needs --unlock-holdout")
             round5.cmd_validate(a.reason if a.reason != ap.get_default("reason")
                                 else "Round 5 holdout (pre-registered)")
+    elif a.cmd.startswith("r6-"):
+        from btcq.research import round6
+        if a.cmd == "r6-power":
+            round6.cmd_power()
+        elif a.cmd == "r6-download":
+            round6.cmd_download(resume=a.resume)
+        elif a.cmd == "r6-sweep":
+            round6.cmd_sweep(rerun=a.rerun)
+        elif a.cmd == "r6-validate":
+            if not a.unlock_holdout:
+                raise SystemExit("r6-validate needs --unlock-holdout")
+            round6.cmd_validate(a.reason if a.reason != ap.get_default("reason")
+                                else "Round 6 holdout (pre-registered)")
     elif a.cmd == "report":
         from btcq.research import report
         print(report.build())

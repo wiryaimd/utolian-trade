@@ -14,6 +14,7 @@ from btcq.strategies.r3_trend import S1Frozen, Trend1h
 from btcq.strategies.r4_universe import UniverseTrend, UniverseTrendLong
 from btcq.strategies.r5_d1 import DonchianEnsemble
 from btcq.strategies.r5_xsmom import XSMomentum
+from btcq.strategies.r6_macro import MacroTrend
 
 ROUND1 = [DonchianTrend(), VolSqueeze(), MTFPullback(), SessionBreakout(), IntradayMomentum(),
           FundingContrarian(), CapitulationReversal(), RangeMeanReversion()]
@@ -25,4 +26,6 @@ ROUND3 = [S1Frozen(), Trend1h(), TakerFlow(), OIBreakout(), OIFlush(), PremiumDi
 ROUND4 = [UniverseTrend(), UniverseTrendLong()]
 # Round 5 portfolio rules (btcq.research.round5); metadata only, never gated by run.cmd_gates.
 ROUND5 = [DonchianEnsemble(), XSMomentum()]
-BY_CODE = {s.code: s for s in ALL + ROUND3 + ROUND4 + ROUND5}
+# Round 6 macro trend sleeve (btcq.research.round6, own registry); metadata only, never gated by run.cmd_gates.
+ROUND6 = [MacroTrend()]
+BY_CODE = {s.code: s for s in ALL + ROUND3 + ROUND4 + ROUND5 + ROUND6}

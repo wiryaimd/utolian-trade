@@ -21,6 +21,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 live = ["websockets>=12"]
+external = ["xlrd==2.0.1"]     # round 6: EIA spot spreadsheets
 
 [tool.setuptools.packages.find]
 where = ["src"]

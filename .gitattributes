@@ -1,3 +1,4 @@
 # Round 4 pre-registered files are hashed: keep their bytes identical on every OS.
 research/round4/** -text
 research/round5/** -text
+research/round6/** -text
