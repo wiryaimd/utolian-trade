@@ -2913,8 +2913,9 @@
   "plateau>=70% (S1)": true
  },
  "dev_pass": false,
- "n_trials": 375,
+ "n_trials": 384,
  "n_eff": 14.849570528171945,
  "psr0_dev": 0.6730823994163292,
- "dsr_dev": 0.09269043284664985
+ "dsr_dev": 0.09269043284664985,
+ "refreshed_by": "round 5 (information only)"
 }
