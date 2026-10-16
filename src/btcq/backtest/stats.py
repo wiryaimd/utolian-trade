@@ -200,3 +200,72 @@ def beta_alpha(y, x) -> dict:
     sr, T, sk, ku = sharpe_moments(a)
     return {"beta": beta, "psr_alpha": psr(sr, T, sk, ku), "sharpe_alpha_ann": float(sr * np.sqrt(365)),
             "alpha_ann": float(a.mean() * 365), "days": int(T)}
+
+
+def nw_lag(T: int) -> int:
+    """Newey-West (1994) automatic lag: floor(4 (T/100)^(2/9))."""
+    return int(np.floor(4 * (T / 100.0) ** (2.0 / 9.0)))
+
+
+def hac_ols(y, x, lag: int | None = None) -> dict:
+    """OLS of y on [1, x] with Newey-West (Bartlett) standard errors and a T/(T-2) correction."""
+    y = np.asarray(y, dtype=np.float64)
+    x = np.asarray(x, dtype=np.float64)
+    T = y.size
+    lag = nw_lag(T) if lag is None else int(lag)
+    X = np.column_stack([np.ones(T), x])
+    XtX_inv = np.linalg.inv(X.T @ X)
+    b = XtX_inv @ X.T @ y
+    u = (y - X @ b)[:, None] * X
+    S = u.T @ u
+    for l in range(1, lag + 1):
+        G = u[l:].T @ u[:-l]
+        S += (1.0 - l / (lag + 1.0)) * (G + G.T)
+    V = XtX_inv @ S @ XtX_inv * T / max(T - 2, 1)
+    se = np.sqrt(np.diag(V))
+    return {"alpha": float(b[0]), "beta": float(b[1]), "se_alpha": float(se[0]),
+            "t_alpha": float(b[0] / se[0]) if se[0] > 0 else 0.0,
+            "t_beta": float(b[1] / se[1]) if se[1] > 0 else 0.0, "lag": lag, "T": T}
+
+
+def year_share_daily(daily) -> float:
+    """Largest calendar year's share of the summed daily returns (inf if the total is <= 0)."""
+    import pandas as pd
+    d = pd.Series(daily, dtype=np.float64)
+    tot = d.sum()
+    if tot <= 0:
+        return float("inf")
+    return float(d.groupby(d.index.year).sum().max() / tot)
+
+
+def power_table(sharpes=(0.0, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0), n_sims: int = 40_000, dev_days: int = 1461,
+                hold_days: int = 1004, n_dsr: float = 16.8496, seed: int = 5, chunk: int = 4000) -> list[dict]:
+    """Round 5 protocol power under iid Gaussian daily returns: P(dev weekly t >= 2), P(+ holdout mean > 0
+    and holdout Sharpe >= 50% of dev) = REPLICATED, P(+ DSR >= 0.95 on dev+holdout at n_dsr) = STRICT."""
+    rng = np.random.default_rng(seed)
+    T = dev_days + hold_days
+    v0 = null_sr_variance(T)
+    sr_star = expected_max_sr(v0, n_dsr)
+    weeks = dev_days // 7
+    out = []
+    for s_ann in sharpes:
+        mu = s_ann / np.sqrt(365) * 0.01
+        k = {"dev": 0, "rep": 0, "strict": 0}
+        for start in range(0, n_sims, chunk):
+            m = min(chunk, n_sims - start)
+            r = rng.normal(mu, 0.01, size=(m, T))
+            w = r[:, : weeks * 7].reshape(m, weeks, 7).sum(axis=2)
+            t_w = w.mean(1) / w.std(1, ddof=1) * np.sqrt(weeks)
+            dev_sr = r[:, :dev_days].mean(1) / r[:, :dev_days].std(1, ddof=1)
+            h = r[:, dev_days:]
+            h_sr = h.mean(1) / h.std(1, ddof=1)
+            dev = t_w >= 2.0
+            rep = dev & (h.mean(1) > 0) & (h_sr >= 0.5 * dev_sr)
+            sr_all = r.mean(1) / r.std(1, ddof=1)
+            z = (sr_all - sr_star) * np.sqrt(T - 1) / np.sqrt(1 + 0.5 * sr_all ** 2)
+            from scipy.stats import norm
+            strict = rep & (norm.cdf(z) >= 0.95)
+            k["dev"] += int(dev.sum()); k["rep"] += int(rep.sum()); k["strict"] += int(strict.sum())
+        out.append({"sharpe_ann": s_ann, "p_dev_pass": k["dev"] / n_sims, "p_replicated": k["rep"] / n_sims,
+                    "p_strict": k["strict"] / n_sims})
+    return out

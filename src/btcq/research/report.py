@@ -268,15 +268,16 @@ def build() -> str:
     res = [r for r in (_load(c) for c in codes) if r is not None]
     res3 = [r for r in (_load(c) for c in R3_CODES) if r is not None]
     res4 = [r for r in (_load(c) for c in R4_CODES) if r is not None]
+    res5 = [r for r in (_load(c) for c in R5_CODES) if r is not None]
     for r in res + res3:
         (TEAR / f"{r['code']}.html").write_text(_tearsheet(r), encoding="utf-8")
     for r in res4:
         (TEAR / f"{r['code']}.html").write_text(_r4_tearsheet(r), encoding="utf-8")
-    (REPORTS_DIR / "summary.html").write_text(_summary(res, res3, res4), encoding="utf-8")
+    (REPORTS_DIR / "summary.html").write_text(_summary(res, res3, res4, res5), encoding="utf-8")
     return str(REPORTS_DIR / "summary.html")
 
 
-def _summary(res, res3=(), res4=()) -> str:
+def _summary(res, res3=(), res4=(), res5=()) -> str:
     charts = {}
     c = Costs()
     by = {r["code"]: r for r in res}
@@ -293,7 +294,8 @@ def _summary(res, res3=(), res4=()) -> str:
     dirty = [r for r in res if "holdout" in r and r.get("holdout_status") == "contaminated"]
 
     # ---- verdict
-    v = _r4_verdict(res4) if res4 else []
+    v = _r5_verdict(res5) if res5 else []
+    v += _r4_verdict(res4) if res4 else []
     v += _r3_verdict(res3) if res3 else []
     if res3:
         v.append("<p><b>Rounds 1–2 (BTC only):</b></p>")
@@ -334,14 +336,15 @@ def _summary(res, res3=(), res4=()) -> str:
         f"capped at {Risk().max_leverage:.0f}×.</p>",
         f'<div class="callout">{"".join(v)}</div>',
         '<div class="tiles">'
-        f'<div class="tile"><div class="label">Strategies tested</div><div class="value">{len(res) + len(res3) + len(res4)}</div>'
-        f'<div class="note">rounds 1–2: {len(res)}, round 3: {len(res3)}, round 4: {len(res4)}</div></div>'
+        f'<div class="tile"><div class="label">Strategies tested</div><div class="value">{len(res) + len(res3) + len(res4) + len(res5)}</div>'
+        f'<div class="note">rounds 1–2: {len(res)}, round 3: {len(res3)}, round 4: {len(res4)}, round 5: {len(res5)}</div></div>'
         f'<div class="tile"><div class="label">Configurations backtested</div><div class="value">{n_trials}</div>'
         f'<div class="note">effective N {n_eff:.1f} (ratcheted)</div></div>'
         f'<div class="tile"><div class="label">Passed dev gates</div><div class="value">{len(finalists) + len(f3)}</div>'
         f'<div class="note">{", ".join(r["code"] for r in finalists + f3) or "none"}</div></div>'
         f'<div class="tile"><div class="label">Passed a clean holdout</div><div class="value">{len(passed) + len(p3)}</div>'
         f'<div class="note">{len(clean) + len(h3)} clean holdout tests run</div></div></div>',
+        *(_r5_section(res5, charts) if res5 else []),
         *(_r4_section(res4, charts) if res4 else []),
         *(_r3_section(res3, charts) if res3 else []),
         "<h2>Rounds 1–2: gate results (BTC only)</h2>",
@@ -835,3 +838,58 @@ def _r4_tearsheet(r) -> str:
              '<div class="card"><h3 style="margin-top:0">Strategy vs random-entry null</h3>'
              '<div id="nl" class="chart sm"></div></div></div>']
     return _page(f"{r['code']} tearsheet", "".join(body), charts)
+
+
+# ---------------------------------------------------------------- round 5
+
+R5_CODES = ["D1", "XS"]
+
+
+def _r5_word(r) -> str:
+    if r.get("headline"):
+        h = r["headline"]
+        return "STRICT pass" if h["STRICT"] else "REPLICATED" if h["REPLICATED"] else "holdout failed"
+    if r["code"] == "D1":
+        return "dev passed: shadow sleeve" if r.get("dev_pass") else "failed dev"
+    return "dev passed, holdout pending" if r.get("dev_pass") else "failed dev"
+
+
+def _r5_verdict(res5) -> list[str]:
+    parts = []
+    for r in res5:
+        d, dd = r["dev"], r["dev_detail"]
+        failed = [k for k, x in r["gates"].items() if not x]
+        parts.append(f"{r['code']} ({html.escape(r['name'])}): {_r5_word(r)}; dev Sharpe {d.get('sharpe', 0):.2f}, "
+                     f"weekly t {dd['weekly']['t']:.2f}, null p {dd['null']['p_value']:.3f}"
+                     + (f"; failed {', '.join(html.escape(f) for f in failed)}" if failed else ""))
+    return ["<p><b>Round 5 (daily-activity strategies on the 5 majors):</b> " + "; ".join(parts) + ".</p>"]
+
+
+def _r5_section(res5, charts) -> list[str]:
+    rows = []
+    for r in res5:
+        d, dd = r["dev"], r["dev_detail"]
+        rows.append([r["code"], html.escape(r["name"]), _fmt(d.get("trades"), "int"), _fmt(d.get("avg_R"), "f3"),
+                     _fmt(d.get("sharpe")), _fmt(dd["weekly"]["t"]), _fmt(d.get("max_dd"), "pct"),
+                     _fmt(dd["null"]["p_value"], "f3"), _fmt(dd.get("activity", {}).get("order_days_share"), "pct0"),
+                     _fmt(r["dsr_dev"]["dsr"], "f3"), _r5_word(r)])
+    out = ["<h2>Round 5: daily-activity strategies on the 5 majors</h2>",
+           "<p class='small muted'>D1 is a daily long-only Donchian ensemble (9 lookbacks, vol-targeted); its holdout "
+           "is contaminated, so a dev pass makes it a zero-risk shadow sleeve next to F1. XS is dollar-neutral weekly "
+           "cross-sectional momentum, confirmed by the one-shot 2024-26 holdout. Pass rule (user decision): dev gates "
+           "+ holdout = REPLICATED; DSR only decides STRICT.</p>",
+           _table(["Code", "Strategy", "Trades", "Avg R", "Sharpe", "Weekly t", "Max DD", "Null p", "Days with orders",
+                   "DSR", "Verdict"], rows, left=2)]
+    for r in res5:
+        out += [f"<h3>{r['code']} gates</h3>",
+                _table(["Gate", "Result"], [[html.escape(k), _mark(v)] for k, v in
+                                            list(r["gates"].items()) + list(r.get("holdout_gates", {}).items())])]
+    out.append("<div class='grid2'>")
+    for r in res5:
+        cid = f"r5_{r['code']}"
+        charts[cid] = _equity_spec(r)
+        charts[cid]["layout"]["margin"] = {"l": 48, "r": 12, "t": 30, "b": 30}
+        out.append(f'<div class="card"><h3 style="margin-top:0">{r["code"]} · {html.escape(r["name"])}</h3>'
+                   f'<div id="{cid}" class="chart sm"></div></div>')
+    out.append("</div>")
+    return out

@@ -32,6 +32,8 @@ DATASETS = {
     "perp_1d_monthly": "data/futures/um/monthly/klines/{sym}/1d/",
     "perp_1d_daily": "data/futures/um/daily/klines/{sym}/1d/",
     "spot_1m_monthly": "data/spot/monthly/klines/{sym}/1m/",
+    "spot_1d_monthly": "data/spot/monthly/klines/{sym}/1d/",
+    "spot_1d_daily": "data/spot/daily/klines/{sym}/1d/",
     "funding_monthly": "data/futures/um/monthly/fundingRate/{sym}/",
     "metrics_daily": "data/futures/um/daily/metrics/{sym}/",
     "premium_1h_monthly": "data/futures/um/monthly/premiumIndexKlines/{sym}/1h/",

@@ -287,7 +287,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["download", "sweep", "gates", "validate", "report", "r3-sweep",
                                     "r3-validate", "r4-symbols", "r4-universe", "r4-download", "r4-sweep",
-                                    "r4-validate"])
+                                    "r4-validate", "r5-power", "r5-download-spot", "r5-sweep", "r5-validate"])
     ap.add_argument("--strategy", default="all")
     ap.add_argument("--finalists", action="store_true")
     ap.add_argument("--unlock-holdout", action="store_true")
@@ -342,6 +342,19 @@ def main() -> None:
                 raise SystemExit("r4-validate needs --unlock-holdout")
             round4.cmd_validate(a.reason if a.reason != ap.get_default("reason")
                                 else "Round 4 Stage B (pre-registered)")
+    elif a.cmd.startswith("r5-"):
+        from btcq.research import round5
+        if a.cmd == "r5-power":
+            round5.cmd_power()
+        elif a.cmd == "r5-download-spot":
+            round5.cmd_download_spot()
+        elif a.cmd == "r5-sweep":
+            round5.cmd_sweep(rerun=a.rerun)
+        elif a.cmd == "r5-validate":
+            if not a.unlock_holdout:
+                raise SystemExit("r5-validate needs --unlock-holdout")
+            round5.cmd_validate(a.reason if a.reason != ap.get_default("reason")
+                                else "Round 5 holdout (pre-registered)")
     elif a.cmd == "report":
         from btcq.research import report
         print(report.build())

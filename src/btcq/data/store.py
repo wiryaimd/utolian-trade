@@ -253,6 +253,76 @@ def fill_funding_gaps(fund: pd.DataFrame, first_ts: int, last_ts: int, rate: flo
     return f.reset_index(drop=True), round(hours, 1)
 
 
+def build_spot_1d(symbol: str, last_month: str) -> dict:
+    """Spot daily klines up to and including last_month (round 5 warm-up only, never the holdout).
+    Days missing inside the span are patched from the daily archive. Writes spot_1d.parquet."""
+    if last_month >= HOLDOUT_START.strftime("%Y-%m"):
+        raise ValueError("spot warm-up data must end before the holdout")
+    out_dir = symbol_dir(symbol)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    keys = [k for k in bv.list_keys(bv.DATASETS["spot_1d_monthly"].format(sym=symbol))
+            if bv.key_period(k) <= last_month]
+    report: dict = {"symbol": symbol, "last_month": last_month, "monthly_files": len(keys)}
+    if not keys:
+        report["status"] = "no_spot_1d"
+        return report
+    df = bv.parse_klines(bv.download_keys(keys))
+    end = int((pd.Timestamp(last_month + "-01", tz="UTC") + pd.offsets.MonthBegin(1)).value // 10**6)
+    days = df["ts"].to_numpy(np.int64) // TF_MS["1d"]
+    missing = np.setdiff1d(np.arange(days.min(), days.max() + 1), days)
+    want = set(pd.to_datetime(missing * TF_MS["1d"], unit="ms", utc=True).strftime("%Y-%m-%d"))
+    if want:
+        dk = [k for k in bv.list_keys(bv.DATASETS["spot_1d_daily"].format(sym=symbol))
+              if bv.key_period(k) in want]
+        if dk:
+            df = pd.concat([df, bv.parse_klines(bv.download_keys(dk))]).drop_duplicates("ts") \
+                .sort_values("ts").reset_index(drop=True)
+        report["patched_days"] = len(dk)
+    df = df[df["ts"] < end].reset_index(drop=True)
+    days = df["ts"].to_numpy(np.int64) // TF_MS["1d"]
+    report.update({"status": "ok", "rows": len(df), "first": _iso(df["ts"].iloc[0]), "last": _iso(df["ts"].iloc[-1]),
+                   "missing_days": int(len(np.setdiff1d(np.arange(days.min(), days.max() + 1), days)))})
+    df[["ts", "open", "high", "low", "close", "volume", "quote_volume"]].to_parquet(out_dir / "spot_1d.parquet")
+    return report
+
+
+def load_spot_1d(symbol: str, period: str = "dev") -> pd.DataFrame:
+    return _period_filter(pd.read_parquet(symbol_dir(symbol) / "spot_1d.parquet"), period)
+
+
+def spot_daily_close(symbol: str) -> pd.Series:
+    """Spot daily closes (index: day-open ms) used only to warm up long lookbacks before a perp exists.
+    BTCUSDT uses the local spot 1m history; other symbols the spot 1d archive."""
+    if symbol == SYMBOL:
+        spot = _period_filter(pd.read_parquet(_pq("spot_1m", symbol)), "dev")
+        spot = spot[spot["ts"] < int(PERP_START.value // 10**6)].copy()
+        spot["ts"] = spot["ts"] // MINUTE_MS * MINUTE_MS
+        bars = resample(spot.drop_duplicates("ts", keep="last"), "1d")
+    else:
+        bars = load_spot_1d(symbol, "dev")
+    return pd.Series(bars["close"].to_numpy(np.float64), index=bars["ts"].to_numpy(np.int64))
+
+
+def stitch_daily(spot: pd.Series, perp: pd.Series, max_fill_days: int = 2) -> pd.Series:
+    """Daily closes on a complete UTC calendar: spot before the first perp day D0, perp from D0 on,
+    no basis adjustment. Gaps of up to max_fill_days are forward-filled; longer ones raise."""
+    d0 = int(perp.index[0])
+    s = pd.concat([spot[spot.index < d0], perp]).sort_index()
+    s = s[~s.index.duplicated(keep="last")]
+    cal = np.arange(int(s.index[0]), int(s.index[-1]) + 1, TF_MS["1d"], dtype=np.int64)
+    s = s.reindex(cal)
+    miss = s.isna().to_numpy()
+    if miss.any():
+        run = longest = 0
+        for m in miss:
+            run = run + 1 if m else 0
+            longest = max(longest, run)
+        if longest > max_fill_days:
+            raise ValueError(f"gap of {longest} days in the stitched daily closes")
+        s = s.ffill()
+    return s
+
+
 def _try_rest(fn, report: dict):
     """REST gap-fill is best effort: some networks block api hosts but not the archive."""
     try:
