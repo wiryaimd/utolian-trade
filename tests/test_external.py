@@ -105,8 +105,8 @@ def test_nonpositive_rule_allowlist():
 def test_source_urls_and_stems():
     s = E.SOURCES["COPPERUSDT"]
     assert "HG%3DF" in s.url and s.stem == "HG_F"
-    assert E.SOURCES["CLUSDT"].url.endswith("/pet/hist_xls/RWTCd.xls")
-    assert E.SOURCES["NATGASUSDT"].url.endswith("/ng/hist_xls/RNGWHHDd.xls")
+    assert "CL%3DF" in E.SOURCES["CLUSDT"].url and "NG%3DF" in E.SOURCES["NATGASUSDT"].url   # Amendment 1
+    assert E.SOURCES["BZUSDT"].url.endswith("/pet/hist_xls/RBRTEd.xls") and E.SOURCES["BZUSDT"].start == "2007-01-01"
     assert len(E.MARKETS) == 11 and set(E.MARKETS) == set(E.SOURCES)
 
 
@@ -234,11 +234,13 @@ def test_download_writes_exact_ms_dates_and_never_reaches_the_holdout(tmp_path, 
     monkeypatch.setattr(E.time, "sleep", lambda s: None)
     days = pd.bdate_range("2015-12-28", "2016-01-08")
     stamps = [_ts(d.year, d.month, d.day) for d in days]
-    _fake_xlrd(monkeypatch, "RWTC", [(d.strftime("%Y-%m-%d"), 30.0 + i) for i, d in enumerate(days)])
+    early = [("2006-12-28", 20.0), ("2006-12-29", 21.0)]               # before Brent's 2007 start: dropped
+    _fake_xlrd(monkeypatch, "RBRTE", early + [(d.strftime("%Y-%m-%d"), 30.0 + i) for i, d in enumerate(days)])
     monkeypatch.setattr(E, "fetch", lambda url, **k: b"x" if "eia" in url else yahoo_json(stamps, list(range(1, 11))))
-    E.download_all(markets=["SPYUSDT", "CLUSDT"])
+    man = E.download_all(markets=["SPYUSDT", "BZUSDT"])
+    assert man.set_index("market").loc["BZUSDT", "dropped_before_start"] == 2
     want = days.tz_localize("UTC").as_unit("ms").asi8.tolist()
-    for m in ("SPYUSDT", "CLUSDT"):
+    for m in ("SPYUSDT", "BZUSDT"):
         assert E._verified_frame(m)["ts"].tolist() == want
         dev = E.load_closes(m, "dev")
         assert len(dev) == 4 and int(dev.index[-1]) == want[3]          # ends 2015-12-31
@@ -255,3 +257,18 @@ def test_a_raw_file_blocks_a_fresh_download(tmp_path, monkeypatch):
     monkeypatch.setattr(E, "fetch", lambda url, **k: (_ for _ in ()).throw(AssertionError("no fetch")))
     with pytest.raises(FileExistsError):
         E.download_all()
+
+
+def test_null_dates_are_reparsed_from_the_verified_raw_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(E, "EXT_DIR", tmp_path / "external")
+    monkeypatch.setattr(E, "R6_DIR", tmp_path / "round6")
+    monkeypatch.setattr(E, "MANIFEST", tmp_path / "round6" / "data_manifest.csv")
+    monkeypatch.setattr(E.time, "sleep", lambda s: None)
+    stamps = [_ts(2024, 1, 2), _ts(2024, 1, 15), _ts(2024, 1, 16), _ts(2024, 1, 19, 18, 0)]
+    monkeypatch.setattr(E, "fetch", lambda url, **k: yahoo_json(stamps, [1.0, None, 2.0, None]))
+    E.download_all(markets=["COPPERUSDT"])
+    assert E.null_dates("COPPERUSDT") == ["2024-01-15", "2024-01-22"]      # evening row -> next weekday
+    raw = list((E.EXT_DIR / "raw" / "yahoo").glob("HG_F_*.json"))[0]
+    raw.write_bytes(raw.read_bytes() + b" ")
+    with pytest.raises(RuntimeError):
+        E.null_dates("COPPERUSDT")

@@ -396,9 +396,9 @@ def _frame(dates, closes_):
     return pd.DataFrame({"ts": _ms(dates), "close": np.asarray(closes_, float), "adjclose": np.nan})
 
 
-def _report(m, dates, c, info=None, ref=None):
+def _report(m, dates, c, info=None, ref=None, nulls=None):
     ref = _ms(pd.bdate_range("2014-01-01", "2026-10-30")) if ref is None else ref
-    return R.red_flags(pd.DataFrame([R.market_report(m, _frame(dates, c), info or {}, ref)]))
+    return R.red_flags(pd.DataFrame([R.market_report(m, _frame(dates, c), info or {}, ref, nulls)]))
 
 
 def _clean_series(seed=0, start="2014-01-02", end="2026-10-15"):
@@ -432,8 +432,12 @@ def test_red_flags_clean_and_each_flag(monkeypatch):
     assert "unadjusted split (dev)" in rep["red_flag_reasons"].iloc[0]
     rep = _report("SPYUSDT", d, c, info={"nonpositive_unexpected": "2015-03-03"})
     assert "non-positive close not allowlisted" in rep["red_flag_reasons"].iloc[0]
-    rep = _report("SPYUSDT", d, c, info={"nulls_dropped": 100})
-    assert "nulls >1%" in rep["red_flag_reasons"].iloc[0]
+    trading = list(d[::80].strftime("%Y-%m-%d"))                    # 42 null rows on reference days: 1.3%
+    rep = _report("SPYUSDT", d, c, info={"nulls_dropped": len(trading)}, nulls=trading)
+    assert "nulls >1%" in rep["red_flag_reasons"].iloc[0] and rep["nulls_on_ref_days"].iloc[0] == len(trading)
+    holidays = [x.strftime("%Y-%m-%d") for x in pd.date_range("2014-01-04", periods=200, freq="W-SAT")]
+    rep = _report("SPYUSDT", d, c, info={"nulls_dropped": 200}, nulls=holidays)   # Amendment 1: not reference days
+    assert "nulls >1%" not in rep["red_flag_reasons"].iloc[0] and rep["nulls_on_ref_days"].iloc[0] == 0
 
 
 def test_data_report_ignores_holdout_returns(monkeypatch):
@@ -727,7 +731,7 @@ def test_hard_error_versions_block_a_rerun(tmp_path, monkeypatch):
 
 def test_power_table_td_bounds():
     w = R.ramp_weights()
-    assert w[0] < w[-1] == 1.0 and np.all(np.diff(w) >= 0) and 14 < w.sum() / 252 < 18
+    assert w[0] < w[-1] == 1.0 and np.all(np.diff(w) >= 0) and 10 < w.sum() / 252 < 18     # 12.4 after Amendment 1
     c = stats.power_table_td(sharpes=(0.0, 0.6, 1.0), n_sims=1500, seed=1)
     rp = stats.power_table_td(sharpes=(0.0, 0.6, 1.0), n_sims=1500, seed=1, ramp=w)
     for t in (c, rp):

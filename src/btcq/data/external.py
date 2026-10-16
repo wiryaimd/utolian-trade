@@ -28,7 +28,7 @@ R6_HOLDOUT_START = pd.Timestamp("2016-01-01", tz="UTC")
 R6_END = pd.Timestamp("2026-10-01", tz="UTC")              # exclusive
 DAY_MS = 86_400_000
 ROW_OFFSET_MS = DAY_MS - 60_000                           # engine rows are stamped 23:59 UTC of the trade date
-PARSER_VERSION = 1
+PARSER_VERSION = 2                                        # 2: null dates recorded, start dates (Amendment 1)
 ALLOWED_NONPOSITIVE = {("CLUSDT", "2020-04-20")}
 _R6_UNLOCKED = False
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) btcq-research"}
@@ -40,6 +40,7 @@ class Source:
     source: str        # "yahoo" | "eia"
     ticker: str        # Yahoo symbol or EIA series id
     first_expected: str
+    start: str | None = None   # rows dated before this are dropped at download (Amendment 1)
 
     @property
     def url(self) -> str:
@@ -61,9 +62,13 @@ SOURCES = {s.market: s for s in [
     Source("XPTUSDT", "yahoo", "PPLT", "2010-01-08"),
     Source("XPDUSDT", "yahoo", "PALL", "2010-01-08"),
     Source("COPPERUSDT", "yahoo", "HG=F", "2000-08-30"),
-    Source("CLUSDT", "eia", "RWTC", "1986-01-02"),
-    Source("BZUSDT", "eia", "RBRTE", "1987-05-20"),
-    Source("NATGASUSDT", "eia", "RNGWHHD", "1997-01-07"),
+    # Amendment 1 (2026-10-17, after the first data report, before any strategy run): the published EIA WTI and
+    # Henry Hub spot series miss up to 45% / 77% of trading days a year (and still 16% / 6% after 2007), so WTI and
+    # natural gas use Yahoo's unadjusted front-month futures like copper; Brent spot is used from 2007 on, where
+    # the EIA series is complete.
+    Source("CLUSDT", "yahoo", "CL=F", "2000-08-23"),
+    Source("BZUSDT", "eia", "RBRTE", "2007-01-02", start="2007-01-01"),
+    Source("NATGASUSDT", "yahoo", "NG=F", "2000-08-30"),
     Source("SPYUSDT", "yahoo", "SPY", "1993-01-29"),
     Source("QQQUSDT", "yahoo", "QQQ", "1999-03-10"),
     Source("EWYUSDT", "yahoo", "EWY", "2000-05-12"),
@@ -101,7 +106,7 @@ def parse_yahoo(raw: bytes, download_utc: datetime) -> tuple[pd.DataFrame, dict]
     q = res["indicators"]["quote"][0]
     adj = res["indicators"].get("adjclose", [{}])[0].get("adjclose") or [None] * len(res["timestamp"])
     today = download_utc.astimezone(tz).date()
-    rows, nulls, unfinished = [], 0, 0
+    rows, nulls, unfinished, null_days = [], 0, 0, []
     for t, c, a in zip(res["timestamp"], q["close"], adj):
         local = datetime.fromtimestamp(t, tz)
         d = _next_weekday(local.date()) if local.hour >= 17 else local.date()
@@ -110,6 +115,7 @@ def parse_yahoo(raw: bytes, download_utc: datetime) -> tuple[pd.DataFrame, dict]
             continue
         if c is None:
             nulls += 1
+            null_days.append(d.isoformat())
             continue
         rows.append((pd.Timestamp(d, tz="UTC"), float(c), float(a) if a is not None else np.nan))
     df = pd.DataFrame(rows, columns=["date", "close", "adjclose"])
@@ -117,8 +123,8 @@ def parse_yahoo(raw: bytes, download_utc: datetime) -> tuple[pd.DataFrame, dict]
     df = df.drop_duplicates("date", keep="last").sort_values("date").reset_index(drop=True)
     splits = res.get("events", {}).get("splits", {})
     divs = res.get("events", {}).get("dividends", {})
-    return df, {"tz": str(tz), "nulls_dropped": nulls, "unfinished_dropped": unfinished,
-                "dups_dropped": n - len(df), "splits": len(splits),
+    return df, {"tz": str(tz), "nulls_dropped": nulls, "null_dates": ";".join(null_days),
+                "unfinished_dropped": unfinished, "dups_dropped": n - len(df), "splits": len(splits),
                 "split_dates": ";".join(sorted(pd.Timestamp(int(s["date"]), unit="s").strftime("%Y-%m-%d")
                                                for s in splits.values())),
                 "dividends": len(divs)}
@@ -132,7 +138,7 @@ def parse_eia_xls(raw: bytes, series_id: str, download_utc: datetime) -> tuple[p
     if key != series_id:
         raise ValueError(f"EIA sheet key {key!r} != {series_id!r}")
     today = download_utc.date()
-    rows, nulls = [], 0
+    rows, nulls, null_days = [], 0, []
     for r in range(3, sh.nrows):
         dv, cv = sh.cell_value(r, 0), sh.cell_value(r, 1)
         if dv in ("", None):
@@ -142,12 +148,14 @@ def parse_eia_xls(raw: bytes, series_id: str, download_utc: datetime) -> tuple[p
             continue
         if cv in ("", None):
             nulls += 1
+            null_days.append(d.isoformat())
             continue
         rows.append((pd.Timestamp(d, tz="UTC"), float(cv), np.nan))
     df = pd.DataFrame(rows, columns=["date", "close", "adjclose"])
     n = len(df)
     df = df.drop_duplicates("date", keep="last").sort_values("date").reset_index(drop=True)
-    return df, {"tz": "America/New_York", "nulls_dropped": nulls, "unfinished_dropped": 0,
+    return df, {"tz": "America/New_York", "nulls_dropped": nulls, "null_dates": ";".join(null_days),
+                "unfinished_dropped": 0,
                 "dups_dropped": n - len(df), "splits": 0, "split_dates": "", "dividends": 0}
 
 
@@ -218,6 +226,10 @@ def download_all(markets: list[str] | None = None, resume: bool = False) -> pd.D
         raw_path.write_bytes(raw)                  # kept even if parsing fails: evidence for an amendment
         df, info = parse_yahoo(raw, now) if src.source == "yahoo" else parse_eia_xls(raw, src.ticker, now)
         df, info2 = clean(df, m)
+        before = int((df["date"] < pd.Timestamp(src.start, tz="UTC")).sum()) if src.start else 0
+        if before:
+            df = df[df["date"] >= pd.Timestamp(src.start, tz="UTC")].reset_index(drop=True)
+        info2["dropped_before_start"] = before
         out = pd.DataFrame({"ts": date_ms(df["date"]), "close": df["close"].astype(float),
                             "adjclose": df["adjclose"].astype(float)})
         check_ts(out["ts"].to_numpy(), m)
@@ -257,6 +269,19 @@ def _verified_frame(market: str) -> pd.DataFrame:
     df = pd.read_parquet(io.BytesIO(b))
     check_ts(df["ts"].to_numpy(), market)
     return df
+
+
+def null_dates(market: str) -> list[str]:
+    """Trade dates of the null rows in a market's raw download (re-parsed from the raw file named in the manifest,
+    after checking its SHA256). Dates only."""
+    row = pd.read_csv(MANIFEST).set_index("market").loc[market]
+    src = SOURCES[market]
+    raw = (EXT_DIR / "raw" / src.source / str(row["raw_file"])).read_bytes()
+    if _sha(raw) != row["raw_sha256"]:
+        raise RuntimeError(f"{market}: raw file does not match the manifest")
+    when = datetime.fromisoformat(str(row["download_utc"]))
+    _, info = parse_yahoo(raw, when) if src.source == "yahoo" else parse_eia_xls(raw, src.ticker, when)
+    return [d for d in info["null_dates"].split(";") if d]
 
 
 def load_dates(market: str) -> np.ndarray:

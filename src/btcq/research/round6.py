@@ -683,7 +683,7 @@ def closed_days(m: str) -> set[str]:
     return set(KNOWN_CLOSURES) | (uk_bank_holidays() if m == "BZUSDT" else set())
 
 
-def market_report(m: str, f: pd.DataFrame, info: dict, ref: np.ndarray) -> dict:
+def market_report(m: str, f: pd.DataFrame, info: dict, ref: np.ndarray, nulls: list[str] | None = None) -> dict:
     """Data facts for one market. Holdout rows are used only for dates, counts, price signs and whether
     consecutive closes are equal; anything built on returns uses dev rows only."""
     src = E.SOURCES[m]
@@ -722,7 +722,9 @@ def market_report(m: str, f: pd.DataFrame, info: dict, ref: np.ndarray) -> dict:
             split_lr.append(abs(float(lr[j - 1])))
         elif ds[0] < s:
             split_missing.append(s)
-    nulls = int(info.get("nulls_dropped") or 0)
+    n_null = int(info.get("nulls_dropped") or 0)
+    ref_days = set(_date_strs(r))
+    null_ref = sum(1 for d in (nulls or []) if d in ref_days)      # Amendment 1: nulls on reference days only
     rows = int(len(ts))
     return {"market": m, "source": src.source, "ticker": src.ticker, "rows": rows,
             "rows_dev": int(dev.sum()), "rows_holdout": int((~dev & (ts < int(E.R6_END.value // 10**6))).sum()),
@@ -736,7 +738,7 @@ def market_report(m: str, f: pd.DataFrame, info: dict, ref: np.ndarray) -> dict:
             "worst_year_missing_share": worst_year,
             "extra_days_vs_ref": int((~np.isin(ts[ts >= ref[0]], ref)).sum()),
             "longest_equal_run": int(eq_run), "equal_share": float(np.mean(c[1:] == c[:-1])) if len(c) > 1 else 0.0,
-            "nulls_dropped": nulls, "null_share": nulls / max(rows + nulls, 1),
+            "nulls_dropped": n_null, "nulls_on_ref_days": null_ref, "null_share": null_ref / max(len(r), 1),
             "dups_dropped": int(info.get("dups_dropped") or 0),
             "dev_abs_lr_gt_20pct": int(len(big)),
             "dev_top5": ";".join(f"{ds[dev][i + 1]}:{lr[i]:+.3f}" for i in top),
@@ -821,7 +823,7 @@ def data_report() -> pd.DataFrame:
     man = pd.read_csv(E.MANIFEST).set_index("market")
     frames = {m: E._verified_frame(m) for m in E.MARKETS}        # raises on any SHA256 mismatch
     ref = reference_dates(frames)
-    return pd.DataFrame([market_report(m, frames[m], man.loc[m].to_dict(), ref) for m in E.MARKETS])
+    return pd.DataFrame([market_report(m, frames[m], man.loc[m].to_dict(), ref, E.null_dates(m)) for m in E.MARKETS])
 
 
 # ---------------------------------------------------------------- guards, logging
