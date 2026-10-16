@@ -887,3 +887,52 @@ Monte Carlo with iid Gaussian returns on 252 trading days a year and 5-day weeks
     commit; every finding was fixed in the registered code.
 - **Approximations:** sizing at entry only, unnetted costs, few markets in the early dev years, and daily closes
   only (no intraday path).
+
+### Amendment 1: data sources (2026-10-17, after the first data report, before any strategy run)
+- **What happened.** The first `r6-download` red-flagged 4 of 11 markets (`research/round6/data_report_initial.csv`,
+  manifest `research/round6/data_manifest_initial.csv`):
+  - EIA WTI (RWTC), Brent (RBRTE) and Henry Hub (RNGWHHD): in 1993–2006 the published spreadsheets miss 6–45%,
+    16–50% and 43–77% of trading days a year, with gaps of up to 9, 8 and 28 weekdays. The raw files show it is the
+    source, not the parser. After 2007, WTI still misses 16% of 2011 and 3.2% of 2015 and Henry Hub 5.6% of 2011;
+    Brent is complete from 2007 (7 missing days in 20 years).
+  - Copper (HG=F): null rows were 1.19% (> 1%), but 63 of its 79 nulls are Globex placeholder rows on NYSE holidays;
+    on trading days the share is 0.24%.
+- **Fix (code commit `6d0d91b`):**
+  - CLUSDT: Yahoo CL=F (NYMEX WTI front month, unadjusted) from 2000-08-23, like copper.
+  - NATGASUSDT: Yahoo NG=F (NYMEX Henry Hub front month, unadjusted) from 2000-08-30.
+  - BZUSDT: EIA RBRTE spot from 2007-01-01; earlier rows are dropped at download.
+  - Red flag 9 becomes: null rows on reference days above 1% of the market's reference days. Null dates are
+    re-parsed from the verified raw file.
+  - Nothing else changes: rule, sizing, costs and slippage tiers, gates, windows, null, verdict, and the CL 2020-04-20
+    allowlist (CL=F also printed −37.63 that day).
+- **How it was chosen.** The candidate series (CL=F, BZ=F, NG=F, and the EIA series from 2007) were first checked
+  with the data report's own checks: dates, null rows, equal closes and dev-only returns, never a holdout price.
+  - CL=F and NG=F: 15–16 missing reference days in 26 years, no gap over 2 days.
+  - BZ=F: a 12-day gap and 7% missing in one year, so it was rejected.
+  - EIA Brent from 2007: clean.
+- **Data.** The old EIA files are kept (raw files under `data/external/raw/eia/`, superseded parquets under
+  `data/external/superseded/`). The three markets are downloaded again with `r6-download --resume`, and their new data
+  must pass the data report before any strategy run.
+- **Consequences:**
+  - **Proxies:** WTI and gas are now front-month futures instead of spot. They carry roll gaps like copper, and gas
+    roll gaps can be large around winter; Henry Hub spot spikes are gone. Brent stays spot.
+  - **Dev history shrinks:** energy starts in 2000 and 2007 instead of 1986, 1987 and 1997, and nothing trades before
+    SPY (1993-01-29). The dev window stays 1986-01-01 → 2015-12-31, with zero returns before the first ready day.
+  - **The shift null's S_min** is still set by PPLT/PALL (2010), so it is unchanged.
+  - **Power** (recomputed with `r6-power` at `6d0d91b` into `research/round6/power_table.csv`; the constant variant is
+    unchanged): the ramp now has about 137 market-years, or 12.4 full-book years of 30 (was 15.9). A dev pass needs a
+    realized full-book Sharpe of about 0.57 (was 0.50), and the funding gate binds under the ramp only if the true
+    hurdle is above 0.57.
+
+| True full-book Sharpe | Ramp: P(dev pass) | Ramp: P(REPLICATED) | Ramp: P(STRICT) |
+|---|---|---|---|
+| 0 | 2.1% | 0.56% | 0.01% |
+| 0.25 | 13.3% | 6.8% | 1.0% |
+| 0.4 | 27.5% | 19.3% | 4.8% |
+| 0.5 | 40.5% | 32.0% | 11.5% |
+| 0.6 | 54.7% | 47.6% | 24.3% |
+| 0.75 | 74.3% | 69.4% | 49.4% |
+| 1.0 | 93.8% | 92.2% | 87.1% |
+
+- **Disclosure:** this amendment was written after seeing the data report's quality statistics (dates, null rows,
+  equal closes, dev-only moves). No strategy was run and no holdout price was looked at.
