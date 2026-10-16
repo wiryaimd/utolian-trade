@@ -17,7 +17,8 @@ from btcq.config import MINUTE_MS, SYMBOL, TF_MS, Costs, Risk
 from btcq.data import store
 from btcq.data.bardata import BarData
 
-REASONS = ["stop", "target", "exit_signal", "time", "reverse", "end"]
+# 6 = "manual" matches the live book; 7 = "delist" is a forced exit (round 4)
+REASONS = ["stop", "target", "exit_signal", "time", "reverse", "end", "manual", "delist"]
 TRADE_COLS = ["entry_i", "exit_i", "dir", "entry_px", "exit_px", "qty", "init_risk", "gross",
               "fees", "funding", "net", "eq_before", "reason", "entry_tf", "maker"]
 
@@ -122,7 +123,11 @@ def _qty(size_mult, risk, max_lev, cash, px, dist):
 
 @njit(cache=True)
 def _simulate(o, h, l, c, fund, exec_idx, entry, stop, target, trail, exit_long, exit_short,
-              limit, size, max_bars, start_i, end_i, risk, max_lev, fee_t, fee_m, slip, eq0, marks):
+              limit, size, max_bars, start_i, end_i, risk, max_lev, fee_t, fee_m, slip, eq0, marks,
+              stop_mode, force_exit, force_pen):
+    # slip: per-minute slippage, applied at the fill minute. stop_mode 1 = stops fill at the
+    # minute's worst price (low for longs, high for shorts). force_exit[i] closes an open
+    # position at c[i] with an extra adverse force_pen (e.g. delisting).
     n_tf = exec_idx.shape[0]
     tr = np.zeros((n_tf + 2, 15))
     nt = 0
@@ -179,7 +184,7 @@ def _simulate(o, h, l, c, fund, exec_idx, entry, stop, target, trail, exit_long,
                 elif entry[t] == -pos:
                     reason = 4
                 if reason >= 0:
-                    px = o[i] * (1.0 - slip * pos)
+                    px = o[i] * (1.0 - slip[i] * pos)
                     gross = qty * (px - epx) * pos
                     fee = qty * px * fee_t
                     cash += gross - fee
@@ -211,7 +216,7 @@ def _simulate(o, h, l, c, fund, exec_idx, entry, stop, target, trail, exit_long,
                     p_tf = t
                     p_size = size[t]
                 else:
-                    px = o[i] * (1.0 + slip * d)
+                    px = o[i] * (1.0 + slip[i] * d)
                     s = stop[t]
                     if not np.isnan(s) and (s - px) * d < 0:
                         dist = abs(px - s)
@@ -269,20 +274,26 @@ def _simulate(o, h, l, c, fund, exec_idx, entry, stop, target, trail, exit_long,
             reason = -1
             if pos == 1:
                 if l[i] <= sl:
-                    px = min(o[i], sl) if not just_filled else sl
+                    if stop_mode == 1:
+                        px = l[i]
+                    else:
+                        px = min(o[i], sl) if not just_filled else sl
                     reason = 0
                 elif (not just_filled) and (not np.isnan(tp)) and h[i] >= tp:
                     px = max(o[i], tp)
                     reason = 1
             else:
                 if h[i] >= sl:
-                    px = max(o[i], sl) if not just_filled else sl
+                    if stop_mode == 1:
+                        px = h[i]
+                    else:
+                        px = max(o[i], sl) if not just_filled else sl
                     reason = 0
                 elif (not just_filled) and (not np.isnan(tp)) and l[i] <= tp:
                     px = min(o[i], tp)
                     reason = 1
             if reason >= 0:
-                px = px * (1.0 - slip * pos)
+                px = px * (1.0 - slip[i] * pos)
                 gross = qty * (px - epx) * pos
                 fee = qty * px * fee_t
                 cash += gross - fee
@@ -300,6 +311,20 @@ def _simulate(o, h, l, c, fund, exec_idx, entry, stop, target, trail, exit_long,
                 if l[i] < ext:
                     ext = l[i]
 
+        # 4b) forced exit at this minute's close (a stop hit in the same minute wins)
+        if pos != 0 and force_exit[i]:
+            px = c[i] * (1.0 - (slip[i] + force_pen) * pos)
+            gross = qty * (px - epx) * pos
+            fee = qty * px * fee_t
+            cash += gross - fee
+            tr[nt, 0] = e_i; tr[nt, 1] = i; tr[nt, 2] = pos; tr[nt, 3] = epx
+            tr[nt, 4] = px; tr[nt, 5] = qty; tr[nt, 6] = e_risk; tr[nt, 7] = gross
+            tr[nt, 8] = e_fee + fee; tr[nt, 9] = e_fund
+            tr[nt, 10] = gross - e_fee - fee - e_fund; tr[nt, 11] = e_eq
+            tr[nt, 12] = 7; tr[nt, 13] = e_tf; tr[nt, 14] = e_maker
+            nt += 1
+            pos = 0
+
         # 5) daily mark-to-market
         while mi < marks.shape[0] and marks[mi] == i:
             eq_marks[mi] = cash + (qty * (c[i] - epx) * pos if pos != 0 else 0.0)
@@ -310,7 +335,7 @@ def _simulate(o, h, l, c, fund, exec_idx, entry, stop, target, trail, exit_long,
 
     if pos != 0:
         i = end_i - 1
-        px = c[i] * (1.0 - slip * pos)
+        px = c[i] * (1.0 - slip[i] * pos)
         gross = qty * (px - epx) * pos
         fee = qty * px * fee_t
         cash += gross - fee
@@ -326,17 +351,30 @@ def _simulate(o, h, l, c, fund, exec_idx, entry, stop, target, trail, exit_long,
 
 
 def run(market: Market, sig: Signals, costs: Costs = Costs(), risk: Risk = Risk(),
-        start: pd.Timestamp | None = None, latency_min: int = 0) -> Result:
-    """Simulate a strategy's signals. Entries are only allowed from `start` onward."""
+        start: pd.Timestamp | None = None, latency_min: int = 0, *,
+        slippage: np.ndarray | None = None, stop_mode: int = 0,
+        force_exit: np.ndarray | None = None, force_penalty: float = 0.0) -> Result:
+    """Simulate a strategy's signals. Entries are only allowed from `start` onward.
+
+    slippage: optional per-minute slippage array (replaces costs.slippage when given).
+    stop_mode: 0 = stops fill at the stop (or the open on a gap); 1 = at the minute's worst price.
+    force_exit: optional bool per minute; an open position is closed at that minute's close with
+    an extra adverse force_penalty (reason "delist")."""
     ex = market.exec_idx(sig.tf, latency_min)
     n_tf = len(ex)
     entry, stop, target, trail, xl, xs, limit, size = sig.arrays(n_tf)
     start_i = market.index_at(start) if start is not None else 0
     end_i = len(market.ts)
+    n = len(market.ts)
+    slip = np.full(n, costs.slippage) if slippage is None else np.ascontiguousarray(slippage, np.float64)
+    fx = np.zeros(n, np.bool_) if force_exit is None else np.ascontiguousarray(force_exit, np.bool_)
+    if slip.shape != (n,) or fx.shape != (n,):
+        raise ValueError("slippage and force_exit must have one value per minute")
     trades, eq = _simulate(market.o, market.h, market.l, market.c, market.fund, ex, entry, stop,
                            target, trail, xl, xs, limit, size, int(sig.max_bars), start_i, end_i,
                            risk.risk_per_trade, risk.max_leverage, costs.taker, costs.maker,
-                           costs.slippage, risk.initial_equity, market.day_marks)
+                           slip, risk.initial_equity, market.day_marks,
+                           int(stop_mode), fx, float(force_penalty))
     tdf = pd.DataFrame(trades, columns=TRADE_COLS)
     for col in ("entry_i", "exit_i", "dir", "reason", "entry_tf", "maker"):
         tdf[col] = tdf[col].astype(np.int64)
