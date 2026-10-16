@@ -354,3 +354,212 @@ every earlier strategy is re-gated afterwards. Stress runs are not trials.
 - **Unchanged this round:** the paper bot and F1's parameters.
 - **Approximation:** the slot accounting rebalances sleeve capital daily, which is second-order compared with sizing
   on live shared equity.
+
+## Round 5 — registered 2026-10-16, before any ETH/XRP/BNB/SOL spot data is downloaded and before any round-5 backtest
+
+**Why.** Round 4 failed: F1's edge did not carry over to 71 never-used perps, although it held on the 5 majors. The
+user now wants about one order a day on the paper bot's 5 markets (BTC, ETH, SOL, XRP and BNB USDT-M perps).
+
+The design panel found no evidenced strategy that makes about one *independent* bet a day after fees on these
+markets. The popular 21–23 UTC "evening long" grosses about 9 bp against a 12–14 bp taker round trip, so it was
+rejected on arithmetic without spending a trial.
+
+**User decisions (2026-10-16)**
+- Daily activity is enough: one order or rebalance a day, even if positions last weeks.
+- Families: D1 (a daily long-only Donchian ensemble) and XS (dollar-neutral cross-sectional momentum among the 5).
+- Carry and options are out.
+
+**Code:** commit `7aed2c0c55a4ad249e4c54c7727858f849f7c9c3`.
+
+### Protocol change (user decision, 2026-10-16, made after every DSR test in rounds 1–4 had failed)
+- **REPLICATED** means a family passes its dev gates and then its one-shot holdout gates.
+- **STRICT** means REPLICATED plus DSR ≥ 0.95 on the dev + holdout daily returns, at N = max(ratcheted N_eff after
+  round 5, 14.85 + 2), passed as a float.
+- It applies to round 5 only. Earlier strategies are not relabelled.
+- **Disclosure.** This relaxes round 4's rule, which also required PSR(0) ≥ 0.95, and the decision was taken after
+  seeing failures. Each family has one primary config fixed here, and its grid is used only for PBO and plateau,
+  never for selection.
+
+### Power table
+Monte Carlo with iid Gaussian daily returns, 40,000 simulations, seed 5 (`research/round5/power_table.csv`):
+- dev = 1,461 days, passing when weekly t ≥ 2;
+- holdout = 1,004 days, passing when mean > 0 and Sharpe ≥ 50% of dev;
+- STRICT = DSR at N = 16.85 over 2,465 days.
+
+| True annual Sharpe | P(dev pass) | P(REPLICATED) | P(STRICT) |
+|---|---|---|---|
+| 0 | 2.4% | 0.41% | 0.02% |
+| 0.5 | 15.7% | 6.8% | 1.2% |
+| 0.75 | 31.0% | 17.3% | 4.9% |
+| 1.0 | 49.9% | 34.2% | 16.0% |
+| 1.25 | 68.8% | 54.0% | 34.6% |
+| 1.5 | 83.8% | 71.8% | 57.8% |
+| 2.0 | 97.7% | 91.5% | 89.3% |
+
+- **Null false-positive rate:** about 0.41% per fixed config (0.02% for STRICT).
+- **Upper bounds:** the other gates lower both the power and the false-positive rate.
+- **Implied thresholds:** weekly t ≥ 2 needs an annual Sharpe of about 1.0. STRICT needs about 1.34 over 2,465 days.
+
+### Data
+- **Execution:** perp 1m only, from 2020-01-01. BTC's stitched pre-2020 spot data is never used for execution.
+- **Funding:** real funding per coin.
+- **Daily close:** the last 1m close before 00:00 UTC. Decisions are made at 00:00 and filled as takers at 00:01.
+- **Warm-up (D1 only)**
+  - Spot daily closes before each perp's first day D0, stitched with no basis adjustment.
+  - BTC uses the local spot 1m history (2017-08 → 2019-12). ETH, XRP, BNB and SOL use the spot 1d archive up to and
+    including the perp's first month + 2 (2020-03, 2020-03, 2020-04, 2020-11), so it never reaches 2024.
+  - Missing days of up to 2 in a row are forward-filled.
+- **Spot data report:** red flags (any one stops before any strategy run) are:
+  - a gap of more than 2 days;
+  - a non-positive price;
+  - median spot/perp overlap basis above 0.5%;
+  - a stitch jump above 1%, or one that can't be measured.
+- **The stitch jump**
+  - It is the same-day basis at D0.
+  - For BTC there is no overlap, so it is measured on adjacent minutes: the spot close at 2019-12-31 23:59 against
+    the perp open at 2020-01-01 00:00.
+  - BTC's overlap basis can't be checked, and that is reported as such.
+- XS uses perp closes only.
+
+### Costs
+- **Fees and slippage:** taker 5 bp per side. Slippage per side is 1 bp for BTC and ETH and 2 bp for SOL, XRP and
+  BNB.
+- **Stress:** the 2× stress doubles fees and slippage. Funding is unchanged.
+
+### D1: daily long-only Donchian ensemble, vol-targeted
+After Zarattini, Pagani and Barbon (2025), "Catching Crypto Trends".
+
+**Rule.** For each market and each lookback L ∈ {5, 10, 20, 30, 60, 90, 150, 250, 360} days:
+- go long when flat and the close is strictly above the maximum of the prior L closes;
+- go flat when the close falls below the trailing level, which is the running maximum since entry of
+  MID_L = (max + min of the last L closes, today included) / 2;
+- stay flat until L+1 closes exist and σ is ready.
+
+**Sizing.** Each sub-sleeve is sized at entry to min(0.25 / σ, 2.0) × its own capital. σ is the standard deviation
+(ddof = 0) of the last 90 daily log returns × √365. Long only, with no other stop.
+
+**Pre-registered engine approximation**
+- 45 sub-sleeves (5 coins × 9 lookbacks), each worth 1/45 of the account, sized at entry only (no daily resizing).
+- The engine stop is a never-triggering sentinel (0.0).
+- R is recomputed as qty × (entry price − trailing level at entry).
+- Entries are a level signal, and so are exits (out whenever the state is flat).
+- **State-synchronous start:** a position already long at the window start is entered at the first decision
+  executed after it.
+
+**Configs:** all 9 lookbacks (primary), {5..60} and {60..360}. All three are subsets of the same 45 runs.
+
+**Dev gates** (on daily and weekly portfolio returns):
+- weekly t ≥ 2;
+- mean daily return > 0 at 2× costs;
+- no calendar year above 50% of the summed daily returns;
+- at least 3 of 5 coins with a positive summed contribution;
+- PBO ≤ 0.5 over the 3 configs;
+- plateau ≥ 70%: both neighbour configs have a positive total return;
+- **alpha gate:** the PSR of the alpha after removing beta to an equal-weight buy-and-hold of the 5 perps
+  (closes, without funding) is at least 0.95;
+- **circular-shift null:** p < 0.05.
+  - Each draw uses ONE random offset k ~ U{30 .. n−30} days, applied to every coin and lookback on the shared window
+    calendar. Days before a coin's listing are flat.
+  - 1,000 draws, seed 55, exact re-simulation through the engine.
+  - The statistic is the mean daily net portfolio return.
+  - One common offset keeps the coins' joint timing structure. The review showed that independent per-coin offsets
+    reject about 11% of the time under no edge when the coins are correlated.
+
+DSR is reported.
+
+**Holdout:** contaminated (the long-only idea came from already-seen holdouts), so it is information only and runs
+only inside an XS unlock.
+
+**Outcome:** a dev pass makes D1 a zero-risk shadow sleeve next to F1. It may replace F1 only by user decision after
+at least 12 months of shadow running, and it never stacks on F1.
+
+### XS: dollar-neutral cross-sectional momentum among the 5 perps
+
+**Rule**
+- **Ranking:** each decision bar ranks the eligible coins by their L-day log return, with ties broken by symbol.
+  - Eligible means at least 31 perp closes, a finite score and σ > 0.
+- **Sides:** long the top k and short the bottom k, with k = n // 2.
+- **Weights:** inverse 30-day volatility within each side.
+- **Size:** 0.5× account gross per side at entry, which is an engine size of 2.5w per coin sleeve (5 slots,
+  max leverage 2.5).
+- **Stop:** each leg has a stop at close × (1 ∓ 4 × MAD30), where MAD30 is the mean absolute daily log return over 30
+  days. The stop also defines R.
+- **Leg handling**
+  - A continuing leg keeps its size.
+  - Long → short reverses in the same minute.
+  - A stopped-out leg re-enters at the next decision if it is still on its side.
+
+**Configs**
+- Weekly decision on the Sunday bar (closing Monday 00:00, filled at 00:01), with L ∈ {7, 14 (primary), 21, 28}.
+- Daily decision with L ∈ {14, 21} and a book-level 7-day minimum hold. The whole book is re-formed only when the
+  target book changed and at least 7 days have passed since the last re-formation, so it stays k long and k short.
+
+**Dev gates**
+- PF ≥ 1.2 (in R);
+- weekly t ≥ 2;
+- mean R > 0 at 2× costs;
+- no entry year above 50% of total R;
+- at least 3 of 5 coins with positive mean R;
+- PBO ≤ 0.5 over the 6 configs;
+- plateau ≥ 70% of the 5 non-primary configs with a positive total return (at least 4 of 5);
+- **rank-permutation null p < 0.05:**
+  - on every decision date, the eligible coins' ranks are randomly permuted;
+  - the permuted ranks go through the same legs, stops and engine;
+  - 1,000 draws, seed 5005;
+  - the statistic is the mean daily portfolio return with fees and slippage at 0 and funding kept;
+- weekly correlation with F1's dev daily returns ≤ 0.3;
+- Newey-West HAC alpha t (lag 7, with a T/(T−2) correction) against F1 ≥ 2. Lags 0, 14 and 28 are reported;
+- leave-one-coin-out: each 4-coin universe is re-simulated with 5 slots kept, and every run's mean R must be > 0.
+
+The trade count is reported, not gated.
+
+**Holdout gates** (2024-01-01 → 2026-09-30):
+- mean R > 0;
+- Sharpe ≥ 50% of dev;
+- trade-sequence max drawdown ≤ the 95th percentile of a block bootstrap of the dev trades;
+- at least 52 trades a year;
+- leave-one-coin-out mean R > 0.
+
+**Holdout status:** clean. Disclosure: general knowledge of 2024–26 relative moves (XRP's late-2024 surge, ETH
+lagging BTC) points toward success.
+
+### Windows and unlock
+- **Dev:** 2020-01-01 → 2023-12-31.
+- **Holdout:** 2024-01-01 → 2026-09-30, starting flat.
+- **Unlock:** once, only if XS passed every dev gate. Everything is checked before the unlock, from timestamps only.
+  - The unlock is logged as `[R5: XS,D1]`.
+  - If a crash leaves no XS result, the unlock may be resumed exactly once, logged as `[R5 resume`.
+  - XS's verdict is saved before D1's information-only run.
+
+### Decisions fixed in advance
+- **XS REPLICATED:** a paper sleeve sharing F1's 3× notional cap, with F1 first.
+- **XS STRICT:** candidate for small real money, at the user's decision.
+- **D1 dev pass:** shadow sleeve (see above).
+- **Any FAIL:** that family is closed on these markets.
+- **Nothing passes:** F1 stays alone and the 1-trade/day target is retired for these markets.
+- The bot work (a daily/weekly scheduler, netted per-market targets) is separate and happens only after a pass.
+
+### Trials and multiple testing
+- 9 dev trials: D1 × 3 and XS × 6, version 1.
+- N_eff is recomputed and ratcheted (Amendment 2), and rounds 1–3 are re-gated.
+- Round 4's U1/U1L multiple-testing fields are refreshed as information.
+- A rerun needs a strategy version bump and adds new trials.
+
+### Reported, not gated
+- D1: R statistics, and the share of days with an order.
+- D1 exposure tracking: realized sized-at-entry gross exposure against the paper's daily-resized target, as a ratio
+  distribution and the share of days outside [0.5, 2].
+- XS: worst-of-minute stop fills, ranks/sides/weights, and alpha against the equal-weight hold.
+- Results by lookback, coin and year.
+
+### Disclosures
+- **Seen in earlier rounds:**
+  - S1 and F1 (4h trend) on these markets, dev and holdouts;
+  - round 4's result that trend works on these 5 majors but not on 71 other perps;
+  - aggregate 2024–26 market behaviour.
+- **Approximations:**
+  - entry-only sizing;
+  - unnetted sub-sleeve costs, which is conservative;
+  - an equal-weight benchmark without funding;
+  - a stitch with no basis adjustment;
+  - SOL's long lookbacks warm up only in 2021.
