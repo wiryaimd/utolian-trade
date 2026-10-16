@@ -11,6 +11,7 @@ from btcq.strategies.r3_flow import TakerFlow
 from btcq.strategies.r3_oi import OIBreakout, OIFlush
 from btcq.strategies.r3_premium import PremiumDislocation
 from btcq.strategies.r3_trend import S1Frozen, Trend1h
+from btcq.strategies.r4_universe import UniverseTrend, UniverseTrendLong
 
 ROUND1 = [DonchianTrend(), VolSqueeze(), MTFPullback(), SessionBreakout(), IntradayMomentum(),
           FundingContrarian(), CapitulationReversal(), RangeMeanReversion()]
@@ -18,4 +19,6 @@ ROUND2 = [DonchianLong(), DonchianVolTarget(), DonchianLongVolTarget()]
 ALL = ROUND1 + ROUND2
 # Round 3 families run as 5-market portfolios via btcq.research.round3.
 ROUND3 = [S1Frozen(), Trend1h(), TakerFlow(), OIBreakout(), OIFlush(), PremiumDislocation()]
-BY_CODE = {s.code: s for s in ALL + ROUND3}
+# Round 4 runs F1 on a monthly universe via btcq.research.round4; never gated by run.cmd_gates.
+ROUND4 = [UniverseTrend(), UniverseTrendLong()]
+BY_CODE = {s.code: s for s in ALL + ROUND3 + ROUND4}

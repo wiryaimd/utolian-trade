@@ -5,7 +5,7 @@ import pytest
 
 from btcq.data import store
 from btcq.data.bardata import BarData
-from btcq.strategies import ALL, ROUND3
+from btcq.strategies import ALL, ROUND3, ROUND4
 from conftest import needs_data
 
 CUTS = ["2022-11-09 13:37", "2023-01-02 00:00", "2023-03-10 04:00", "2023-03-12 21:15",
@@ -26,7 +26,7 @@ def _arrays(sig):
 
 
 @needs_data
-@pytest.mark.parametrize("strat", ALL + ROUND3, ids=lambda s: s.code)
+@pytest.mark.parametrize("strat", ALL + ROUND3 + ROUND4, ids=lambda s: s.code)
 def test_signals_unchanged_by_future_data(strat, data):
     rng = np.random.default_rng(0)
     configs = strat.configs()

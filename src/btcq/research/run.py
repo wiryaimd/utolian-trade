@@ -281,11 +281,16 @@ def cmd_validate(codes: list[str], reason: str) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["download", "sweep", "gates", "validate", "report", "r3-sweep",
-                                    "r3-validate"])
+                                    "r3-validate", "r4-symbols", "r4-universe", "r4-download", "r4-sweep",
+                                    "r4-validate"])
     ap.add_argument("--strategy", default="all")
     ap.add_argument("--finalists", action="store_true")
     ap.add_argument("--unlock-holdout", action="store_true")
     ap.add_argument("--reason", default="final holdout evaluation of dev-gate finalists")
+    ap.add_argument("--exchange-info", default=None, help="r4-symbols: exchangeInfo snapshot path")
+    ap.add_argument("--stage", default="A", choices=["A", "B"], help="r4-download")
+    ap.add_argument("--keep-raw", action="store_true", help="r4-download: keep raw kline zips")
+    ap.add_argument("--rerun", action="store_true", help="r4-sweep: overwrite results (needs a version bump)")
     a = ap.parse_args()
     codes = [s.code for s in ALL] if a.strategy == "all" else a.strategy.split(",")
     if a.cmd == "download":
@@ -316,6 +321,22 @@ def main() -> None:
         if not codes:
             raise SystemExit("no round-3 family passed the dev gates; holdout stays locked")
         round3.validate(codes, a.reason)
+    elif a.cmd.startswith("r4-"):
+        from pathlib import Path
+        from btcq.research import round4
+        if a.cmd == "r4-symbols":
+            round4.cmd_symbols(Path(a.exchange_info) if a.exchange_info else None)
+        elif a.cmd == "r4-universe":
+            round4.cmd_universe()
+        elif a.cmd == "r4-download":
+            round4.cmd_download(a.stage, keep_raw=a.keep_raw)
+        elif a.cmd == "r4-sweep":
+            round4.cmd_sweep(round4.CODES if a.strategy == "all" else a.strategy.split(","), rerun=a.rerun)
+        elif a.cmd == "r4-validate":
+            if not a.unlock_holdout:
+                raise SystemExit("r4-validate needs --unlock-holdout")
+            round4.cmd_validate(a.reason if a.reason != ap.get_default("reason")
+                                else "Round 4 Stage B (pre-registered)")
     elif a.cmd == "report":
         from btcq.research import report
         print(report.build())

@@ -267,13 +267,16 @@ def build() -> str:
     codes = [s.code for s in ALL] + ["C12"]
     res = [r for r in (_load(c) for c in codes) if r is not None]
     res3 = [r for r in (_load(c) for c in R3_CODES) if r is not None]
+    res4 = [r for r in (_load(c) for c in R4_CODES) if r is not None]
     for r in res + res3:
         (TEAR / f"{r['code']}.html").write_text(_tearsheet(r), encoding="utf-8")
-    (REPORTS_DIR / "summary.html").write_text(_summary(res, res3), encoding="utf-8")
+    for r in res4:
+        (TEAR / f"{r['code']}.html").write_text(_r4_tearsheet(r), encoding="utf-8")
+    (REPORTS_DIR / "summary.html").write_text(_summary(res, res3, res4), encoding="utf-8")
     return str(REPORTS_DIR / "summary.html")
 
 
-def _summary(res, res3=()) -> str:
+def _summary(res, res3=(), res4=()) -> str:
     charts = {}
     c = Costs()
     by = {r["code"]: r for r in res}
@@ -290,7 +293,8 @@ def _summary(res, res3=()) -> str:
     dirty = [r for r in res if "holdout" in r and r.get("holdout_status") == "contaminated"]
 
     # ---- verdict
-    v = _r3_verdict(res3) if res3 else []
+    v = _r4_verdict(res4) if res4 else []
+    v += _r3_verdict(res3) if res3 else []
     if res3:
         v.append("<p><b>Rounds 1–2 (BTC only):</b></p>")
     if passed:
@@ -338,6 +342,7 @@ def _summary(res, res3=()) -> str:
         f'<div class="note">{", ".join(r["code"] for r in finalists + f3) or "none"}</div></div>'
         f'<div class="tile"><div class="label">Passed a clean holdout</div><div class="value">{len(passed) + len(p3)}</div>'
         f'<div class="note">{len(clean) + len(h3)} clean holdout tests run</div></div></div>',
+        *(_r4_section(res4, charts) if res4 else []),
         *(_r3_section(res3, charts) if res3 else []),
         "<h2>Rounds 1–2: gate results (BTC only)</h2>",
         "<p class='small muted'>Gates are pre-registered in research/PREREGISTRATION.md, round 2 included. "
@@ -549,7 +554,7 @@ def _tearsheet(r) -> str:
     if r.get("inherited_gates"):
         body.append(f'<p class="small muted">{" and ".join(r["inherited_gates"])} are not defined for one fixed '
                     "portfolio; " + ("they are inherited from S1, where its parameters were chosen"
-                                     if r["code"] == "F1" else "the worse component's value is used")
+                                     if r["code"] in ("F1", "U1", "U1L") else "the worse component's value is used")
                     + " (pre-registered).</p>")
     status = ("passed all gates" if r.get("final_pass") is True else
               "passed dev gates, holdout info only" if contaminated and r.get("dev_pass") else
@@ -666,4 +671,167 @@ def _tearsheet(r) -> str:
     body += ["<h2>Parameter grid (dev)</h2><p class='small muted'>Sorted by neighbourhood Sharpe; the chosen config "
              "is in bold.</p>",
              _table(pk + ["Trades", "Avg R", "PF", "Sharpe", "Nbhd Sharpe", "Max DD"], rows, left=len(pk), highlight=hl)]
+    return _page(f"{r['code']} tearsheet", "".join(body), charts)
+
+
+# ---------------------------------------------------------------- round 4
+
+R4_CODES = ["U1", "U1L"]
+
+
+def _r4_stage_word(r) -> str:
+    if "headline" in r:
+        h = r["headline"]
+        return "STRICT pass" if h["STRICT"] else "REPLICATED" if h["REPLICATED"] else "not replicated"
+    return "Stage A passed, Stage B pending" if r.get("dev_pass") else "failed Stage A"
+
+
+def _r4_verdict(res4) -> list[str]:
+    by = {r["code"]: r for r in res4}
+    u = by.get("U1")
+    if u is None:
+        return []
+    d = u["dev"]
+    failed = [k for k, x in u["gates"].items() if not x]
+    v = [f"<p><b>Round 4 (F1 frozen on a point-in-time top-20 universe of crypto perps):</b> U1 "
+         f"{_r4_stage_word(u)}. On the {u['dev_detail']['n_symbols']} never-used markets in Stage A (2020-04 → "
+         f"2023-12) it made {d['trades']} trades ({d.get('trades_per_year', 0) / 52:.1f}/week), "
+         f"{d.get('avg_R', 0):+.3f} R per trade, Sharpe {d.get('sharpe', 0):.2f}, weekly t "
+         f"{u['weekly']['t']:.2f}, null p {u['null']['p_value']:.3f}"
+         + (f"; failed: {', '.join(html.escape(f) for f in failed)}" if failed else "; every Stage A gate passed")
+         + ".</p>"]
+    if "headline" in u:
+        h = u["headline"]
+        v.append(f"<p>Stage B (2024-01 → 2026-09): Sharpe {u['holdout']['summary'].get('sharpe', 0):.2f}, "
+                 f"{u['holdout']['summary'].get('avg_R', 0):+.3f} R per trade. Over 2020-04 → 2026-09: PSR "
+                 f"{h['psr0']:.3f}, DSR {h['dsr']:.3f} (needs Sharpe {h['sharpe_needed_for_dsr_ann']:.2f}).</p>")
+    return v
+
+
+def _r4_row(r, label, detail) -> list[str]:
+    s = detail["summary"]
+    return [_code_link(r), label, str(detail.get("n_symbols", "")), _fmt(s.get("trades_per_year", 0) / 52),
+            _fmt(s.get("avg_R"), "f3"), _fmt(s.get("pf")), _fmt(detail["weekly"]["t"]), _fmt(s.get("sharpe")),
+            _fmt(s.get("max_dd"), "pct"), _fmt(detail["null"]["p_value"], "f3"),
+            _fmt(detail["concurrency"]["mean"]), str(detail["skipped_info"]["entries"])]
+
+
+def _r4_section(res4, charts) -> list[str]:
+    rows = []
+    for r in res4:
+        rows.append(_r4_row(r, "Stage A · gated", r["dev_detail"]))
+        rows.append(_r4_row(r, "Stage A · full (info)", r["dev_full"]))
+        if "holdout" in r:
+            rows.append(_r4_row(r, "Stage B · gated", r["holdout"]))
+            rows.append(_r4_row(r, "Stage B · full (info)", r["holdout_full"]))
+    gate_names = list(res4[0]["gates"].keys())
+    gate_rows = [[_code_link(r)] + [_mark(x) for x in r["gates"].values()] for r in res4]
+    out = ["<h2>Round 4: F1 on a point-in-time top-20 universe</h2>",
+           "<p class='small muted'>F1 unchanged, traded on the monthly top 20 USD-M crypto perps by 90-day median "
+           "volume (delisted coins included, meme coins kept, stock/commodity perps excluded). 0.30% risk per trade, "
+           "at most 20 open positions. Gates use only the markets never seen in research (the gated set); the full "
+           "universe, including BTC/ETH/SOL/XRP/BNB, is information only.</p>",
+           _table(["Code", "Account", "Symbols", "Trades/wk", "Avg R", "PF", "Weekly t", "Sharpe", "Max DD",
+                   "Null p", "Avg open", "Skipped"], rows, left=2),
+           "<h3>Round 4 Stage A gates (gated set)</h3>", _table(["Code"] + gate_names, gate_rows)]
+    hold = [r for r in res4 if "holdout_gates" in r]
+    if hold:
+        out += ["<h3>Round 4 Stage B gates</h3>",
+                _table(["Code"] + list(hold[0]["holdout_gates"]) + ["Verdict"],
+                       [[_code_link(r)] + [_mark(x) for x in r["holdout_gates"].values()] + [_r4_stage_word(r)]
+                        for r in hold])]
+    out.append("<div class='grid2'>")
+    for r in res4:
+        cid = f"r4_{r['code']}"
+        charts[cid] = _equity_spec(r)
+        charts[cid]["layout"]["margin"] = {"l": 48, "r": 12, "t": 30, "b": 30}
+        out.append(f'<div class="card"><h3 style="margin-top:0">{r["code"]} · {html.escape(r["name"])}</h3>'
+                   f'<div id="{cid}" class="chart sm"></div></div>')
+    out.append("</div>")
+    return out
+
+
+def _r4_tearsheet(r) -> str:
+    charts = {}
+    dd, df_ = r["dev_detail"], r["dev_full"]
+    d = r["dev"]
+    body = ['<p class="small"><a href="../summary.html">← Summary</a></p>',
+            f"<h1>{r['code']} · {html.escape(r['name'])}</h1>",
+            f'<p class="sub">4h bars · <code>{html.escape(_params(r["params"]))}</code> · universe '
+            f'<code>{html.escape(r["universe_id"])}</code> · 0.30% risk per trade, max 20 open positions</p>',
+            f'<div class="card"><p><b>Hypothesis.</b> {html.escape(r["hypothesis"])}</p>'
+            f'<p style="margin:0"><b>Rules.</b> {html.escape(r["rules"])}</p></div>',
+            '<p class="small muted">PBO and plateau are not defined for one fixed rule; they are inherited from S1, '
+            "where its parameters were chosen (pre-registered).</p>"]
+    tiles = [("Stage A trades", _fmt(d.get("trades"), "int"), f"{d.get('trades_per_year', 0) / 52:.1f}/week, gated"),
+             ("Avg R / trade", _fmt(d.get("avg_R"), "f3"), f"win rate {_fmt(d.get('win_rate'), 'pct0')}"),
+             ("Weekly t", _fmt(r["weekly"]["t"]), f"Sharpe {_fmt(d.get('sharpe'))}"),
+             ("Verdict", _r4_stage_word(r), "gated set")]
+    body.append('<div class="tiles">' + "".join(
+        f'<div class="tile"><div class="label">{a}</div><div class="value" style="font-size:22px">{b}</div>'
+        f'<div class="note">{c}</div></div>' for a, b, c in tiles) + "</div>")
+    gates = [[html.escape(k), _mark(v)] for k, v in r["gates"].items()]
+    gates += [[html.escape(k), _mark(v)] for k, v in r.get("holdout_gates", {}).items()]
+    if "headline" in r:
+        h = r["headline"]
+        gates += [[f"PSR(0) ≥ 0.95 over {h['window'][0]} → {h['window'][1]} ({h['psr0']:.3f})", _mark(h["psr0"] >= 0.95)],
+                  [f"DSR ≥ 0.95 at N_eff {h['n_eff']:.1f} ({h['dsr']:.3f})", _mark(h["dsr"] >= 0.95)]]
+    body += ["<h2>Gates</h2>", _table(["Gate", "Result"], gates)]
+    charts["eq"] = _equity_spec(r)
+    charts["dd"] = _dd_spec(r)
+    body += ["<h2>Equity and drawdown (gated set)</h2>",
+             '<div class="card"><div id="eq" class="chart"></div></div>',
+             '<div class="card"><div id="dd" class="chart sm"></div></div>']
+
+    def col(x):
+        s = x["summary"]
+        return [_fmt(s.get("trades"), "int"), _fmt(s.get("trades_per_year", 0) / 52), _fmt(s.get("avg_R"), "f3"),
+                _fmt(s.get("pf")), _fmt(s.get("t_stat")), _fmt(x["weekly"]["t"]), _fmt(s.get("sharpe")),
+                _fmt(s.get("cagr"), "pct"), _fmt(s.get("max_dd"), "pct"),
+                f"{s.get('long_n', 0)} / {_fmt(s.get('long_avg_R'), 'f3')}",
+                f"{s.get('short_n', 0)} / {_fmt(s.get('short_avg_R'), 'f3')}",
+                f"{_fmt(s.get('fees_R'), 'f3')} / {_fmt(s.get('funding_R'), 'f3')}",
+                _fmt(x["null"]["p_value"], "f3"), _fmt(x["concurrency"]["mean"]),
+                f"{x['skipped_info']['entries']}", _fmt(x["benchmark"]["sharpe"])]
+    names = ["Trades", "Trades / week", "Avg R", "PF (R)", "Trade t-stat", "Weekly t", "Sharpe", "CAGR", "Max DD",
+             "Long n / avg R", "Short n / avg R", "Fees / funding (R)", "Random-entry null p", "Avg open positions",
+             "Entries skipped by the cap", "Equal-weight hold Sharpe"]
+    cols, vals = ["A gated", "A full"], [col(dd), col(df_)]
+    if "holdout" in r:
+        cols += ["B gated", "B full"]
+        vals += [col(r["holdout"]), col(r["holdout_full"])]
+    body += ["<h2>Statistics</h2>", _table(["Metric"] + cols, [[n] + [v[i] for v in vals] for i, n in enumerate(names)])]
+    extra = [["2× costs avg R", _fmt(r["stress_2x"].get("avg_R"), "f3")],
+             ["Worst-of-minute stops avg R", _fmt(r["worst_minute"].get("avg_R"), "f3")],
+             ["Meme coins: trades / avg R / share of R",
+              f"{dd['meme_info'].get('trades', 0)} / {_fmt(dd['meme_info'].get('avg_R'), 'f3')} / "
+              f"{_fmt(dd['meme_info'].get('share_of_R'), 'pct0')}"],
+             ["Delisted coins: trades / forced exits / share of R",
+              f"{dd['delisted_info'].get('trades', 0)} / {dd['delisted_info'].get('forced_exits', 0)} / "
+              f"{_fmt(dd['delisted_info'].get('share_of_R'), 'pct0')}"],
+             ["Symbols with 10+ trades positive", f"{r['consistency']['positive']} / {r['consistency']['eligible']}"],
+             ["DSR on Stage A alone (info)", _fmt(r.get("dsr_dev"), "f3")]]
+    body += ["<h2>Robustness</h2>", _table(["Check", "Value"], extra)]
+    st = sorted(dd["symbol_table"], key=lambda x: -x["trades"])
+    body += ["<h2>Per market (Stage A, gated)</h2>",
+             _table(["Market", "Member months", "Trades", "Avg R", "Sum R", "Long avg R", "Short avg R", "Meme",
+                     "Delisted"],
+                    [[x["symbol"], str(x["member_months"]), _fmt(x["trades"], "int"), _fmt(x["avg_R"], "f3"),
+                      _fmt(x["sum_R"]), _fmt(x["long_avg_R"], "f3"), _fmt(x["short_avg_R"], "f3"),
+                      "yes" if x["is_meme"] else "", "yes" if x["delisted"] else ""] for x in st])]
+    yrs = pd.DataFrame(dd["years"]).assign(period="A")
+    if "holdout" in r:
+        yrs = pd.concat([yrs, pd.DataFrame(r["holdout"]["years"]).assign(period="B")])
+    body += ["<h2>By year (gated)</h2>", _table(
+        ["Year", "Stage", "Trades", "Win", "Avg R", "Sum R", "Return"],
+        [[str(int(y.year)), y.period, _fmt(y.trades, "int"), _fmt(y.win_rate, "pct0"), _fmt(y.avg_R, "f3"),
+          _fmt(y.sum_R), _fmt(y["return"], "pct")] for _, y in yrs.iterrows()], left=2)]
+    Rv = r["_tr_dev"]["R"].clip(-3, 10).to_numpy()
+    charts["rh"] = _hist_spec(Rv, "R multiple per trade (Stage A, clipped to [-3, 10])", 0.0, "0", nbins=60)
+    charts["nl"] = _hist_spec(r["_dists"]["null"], "Mean return per trade, random entries",
+                              r["null"]["actual_mean_ret"], f"strategy (p={r['null']['p_value']:.3f})", pct=True)
+    body += ["<h2>Distributions</h2><div class='grid2'>",
+             '<div class="card"><h3 style="margin-top:0">Trade outcomes</h3><div id="rh" class="chart sm"></div></div>',
+             '<div class="card"><h3 style="margin-top:0">Strategy vs random-entry null</h3>'
+             '<div id="nl" class="chart sm"></div></div></div>']
     return _page(f"{r['code']} tearsheet", "".join(body), charts)

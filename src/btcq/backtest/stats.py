@@ -167,3 +167,36 @@ def grid_neighbors(grid: dict[str, list], configs: list[dict]) -> list[list[int]
                     nb.append(j)
         out.append(nb)
     return out
+
+
+def weekly_returns(daily) -> "pd.Series":
+    """Compound daily returns into Monday-Sunday (UTC) weeks; partial edge weeks are kept."""
+    import pandas as pd
+    d = pd.Series(daily, dtype=np.float64)
+    return (1.0 + d).groupby(pd.Grouper(freq="W-SUN")).prod() - 1.0
+
+
+def weekly_t(daily) -> dict:
+    """t-stat of the mean weekly return. Clustered entries across markets make trade-level
+    t-stats too optimistic; portfolio returns per week are much closer to independent."""
+    w = weekly_returns(daily).to_numpy()
+    n = w.size
+    sd = w.std(ddof=1) if n > 1 else 0.0
+    if n < 2 or sd == 0:
+        return {"t": 0.0, "n": int(n), "mean": float(w.mean()) if n else 0.0, "sd": float(sd), "sharpe_ann": 0.0}
+    return {"t": float(w.mean() / sd * np.sqrt(n)), "n": int(n), "mean": float(w.mean()), "sd": float(sd),
+            "sharpe_ann": float(w.mean() / sd * np.sqrt(52))}
+
+
+def beta_alpha(y, x) -> dict:
+    """OLS beta of daily returns y on a benchmark x (aligned days), and the PSR / annual Sharpe of
+    the residual return y - beta*x."""
+    import pandas as pd
+    j = pd.concat([pd.Series(y, dtype=np.float64), pd.Series(x, dtype=np.float64)], axis=1).dropna()
+    yy, xx = j.iloc[:, 0].to_numpy(), j.iloc[:, 1].to_numpy()
+    vx = xx.var(ddof=1) if xx.size > 1 else 0.0
+    beta = float(np.cov(yy, xx, ddof=1)[0, 1] / vx) if vx > 0 else 0.0
+    a = yy - beta * xx
+    sr, T, sk, ku = sharpe_moments(a)
+    return {"beta": beta, "psr_alpha": psr(sr, T, sk, ku), "sharpe_alpha_ann": float(sr * np.sqrt(365)),
+            "alpha_ann": float(a.mean() * 365), "days": int(T)}

@@ -41,3 +41,22 @@ def combine_null(dists: list[np.ndarray], counts: list[int]) -> np.ndarray:
         return np.zeros(1)
     stack = np.vstack([d for d, k in zip(dists, keep) if k])
     return (stack * w[keep][:, None]).sum(axis=0) / w[keep].sum()
+
+
+def assemble_slots(parts: list[tuple[pd.Series, pd.DataFrame]], slots: int, calendar: pd.DatetimeIndex,
+                   initial_equity: float = Risk().initial_equity) -> tuple[engine.Result, pd.Series]:
+    """Round 4: a fixed number of equal slots. Each sleeve is 1/slots of the account; the account's
+    daily return is the sum of the sleeves' daily returns divided by `slots`, and a sleeve with no
+    data or no position contributes 0 (unlike `assemble`, which averages the available sleeves)."""
+    daily = pd.Series(0.0, index=calendar)
+    for d, _ in parts:
+        if len(d):
+            daily = daily.add(d.reindex(calendar).fillna(0.0), fill_value=0.0)
+    daily = daily / slots
+    trades = pd.concat([t for _, t in parts], ignore_index=True) if parts else pd.DataFrame()
+    if len(trades):
+        trades = trades.sort_values(["entry_time", "symbol"]).reset_index(drop=True)
+        trades["ret"] = trades["ret"] / slots
+    equity = initial_equity * (1.0 + daily).cumprod()
+    start = calendar[0] if len(calendar) else pd.Timestamp("1970-01-01", tz="UTC")
+    return engine.Result(trades, equity, initial_equity, start), daily
