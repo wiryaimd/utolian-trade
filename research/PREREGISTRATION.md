@@ -186,3 +186,171 @@ information only, and the holdout gates and costs are unchanged.
 - The result is clean out-of-sample evidence on markets and dates never used for tuning or evaluation, and it will be
   reported as such.
 - The run is logged in `research/holdout_log.jsonl`.
+
+## Round 4 — registered 2026-10-16, before any 1d or 1m data of the new markets was downloaded
+
+**Why.** The user wants about one trade a day. Round 3 showed that trading F1 faster destroys its edge. F2 (the 1h
+version) is worse at every lookback, and mixing it into F1 lowers Sharpe from 1.20 to 1.10. So the extra trades come
+from breadth instead: the same frozen rule on more markets. Most of those markets have never been used in any round,
+which makes this a replication test of F1.
+
+**Code and frozen inputs.**
+- Code commit `bd901500e2a0ff675b7dc17285049278bca421e6`.
+- Files frozen in this commit, all in `research/round4/`:
+  - `exchange_info_um_2026-10-16.json`: fetched 2026-10-16 from the public `fapi/v1/exchangeInfo` via the user's
+    VPS. SHA256 `918bc3087252d4fee05e9cf8f49039b9c182e3a304a1fef4e63180d18b2fa338`.
+  - `symbol_overrides.csv` (SHA256 `eeb364767d13efaeae4c173a70374027267a5b2c06e22ac866fb3d4a9349ac3e`)
+  - `symbols.csv` (SHA256 `f7ab96c113b6d2761fa1357b4943d0bd80b93644d7f0dbfd47dc76797bbea0ff`)
+- User decisions (2026-10-16):
+  - crypto-only universe;
+  - meme coins kept, and reported separately as information;
+  - 0.30% risk per trade;
+  - the decision rule below, fixed in advance.
+
+### Trials
+U1 and U1L are version 1 and add 2 dev trials. The trial registry and the N_eff ratchet (Amendment 2) apply, and
+every earlier strategy is re-gated afterwards. Stress runs are not trials.
+
+- **U1:** F1 exactly, long and short. That is a 4h Donchian breakout (close crosses the prior 40-bar high or low), an
+  initial stop at 3.5×ATR(14), an exit on the opposite 20-bar channel, and decisions executed with a 1-minute latency.
+- **U1L:** U1 with short breakouts ignored. Information only, except under the U1L rule below.
+
+### Symbol catalogue
+- **Source:** every symbol under `data/futures/um/{monthly,daily}/klines/` in the data.binance.vision archive, listed
+  2026-10-16. That is 1,066 symbols, including delisted ones.
+- **Kept:** names ending in `USDT` with no `_`.
+- **Excluded:**
+  - stablecoin bases (USDC, BUSD, TUSD, USDP, FDUSD, DAI, USDE, USD1, RLUSD, PYUSD, USDS, FRAX, LUSD, GUSD, EUR,
+    EURI, AEUR, XUSD, USTC, UST);
+  - index contracts (BTCDOM, DEFI, FOOTBALL, BLUEBIRD, or `underlyingType` INDEX);
+  - non-crypto underlyings (`contractType` TRADIFI_PERPETUAL, or `underlyingType` other than COIN);
+  - tokenized gold (PAXG, XAUT);
+  - the overrides file. DOTECOUSDT is excluded there as a composite index.
+- **Counts:** 678 kept. Excluded: 220 non-crypto, 157 not a USDT perpetual, 5 index, 3 stablecoin, 2 tokenized gold,
+  1 override.
+- **The snapshot only classifies symbols and gives delisting status.** It never decides eligibility or ranking.
+- **Missing from the snapshot:** 29 kept symbols, all delisted coins such as LUNA, MATIC, SRM, EOS, BTT and HNT. They
+  are classified by the lists above.
+- **Meme flag:** `underlyingSubType` contains "Meme", or the overrides file says so.
+- **Normalized base:** strip a leading 1000000, 100000, 10000, 1000 or 1M before a letter.
+- **Separate symbols:** renamed tickers (MATIC/POL, BTT/1000BTTC) and LUNA/LUNA2.
+
+### Universe (each UTC month m, from 2020-04 to 2026-09, using only data dated before m)
+- **Input:** daily quote volume from the archive's 1d klines. Only volume and dates are stored, never prices.
+  Days missing from a truncated monthly file are patched from the daily 1d archive. Days still missing after that
+  had no archived trading.
+- **Eligible:**
+  - the first archived day is at least 90 days before m;
+  - quote volume > 0 on each of the 7 days before m;
+  - not excluded.
+- **Rank:** median daily quote volume over the 90 days before m, with missing days counted as 0. Same normalized
+  base: the higher median is kept. Take the top 20.
+- **Commit:** `universe.csv` is committed after it is built and before any 1m download.
+- **Gated set:** members other than BTC, ETH, SOL, XRP and BNB. Those five are information only, because their F1
+  results have been seen.
+- **Full universe:** all members, information only. This is what the bot would trade.
+
+### Execution
+- **Entries:** only on decisions whose 4h bar closes inside a member month. After a coin leaves the universe, its open
+  position runs to the normal exit. Signals are computed on the full price history.
+- **Path:** stops are checked on the 1m path. A stop wins when the stop and another event fall in the same minute, and
+  a gap through the stop fills at the open.
+- **Delisting or settlement:** any stretch of more than 24h with no traded minute (zero volume or no rows)
+  counts. That includes a stretch inside the data and one where trading stops more than 24h before the window end.
+  - An open position is closed at the last traded 1m close before the stretch, with an extra 1% adverse.
+  - No new entries start until 7 days after trading resumes.
+  - This covers ordinary delistings and also contracts that were delisted and later relisted under the same
+    ticker.
+  - The snapshot's status is not used for this rule.
+- **Data rules:** drop the trailing zero-volume minutes. Fill funding gaps longer than 9h with the synthetic 0.01%/8h
+  rate. No other cleaning.
+- **Data report:** written per stage, and committed before any strategy run.
+  - Red flags: 1m coverage under 90% in any member month, funding gaps over 5% of member hours, or an archive that
+    ends early for a symbol the snapshot lists as TRADING.
+  - Any red flag stops the run until the data is fixed.
+
+### Costs
+- **Fees:** taker 5 bp per side.
+- **Slippage per side, by rank in the month of the fill:**
+  - ranks 1–10: 2 bp;
+  - ranks 11–20: 3 bp;
+  - not a member: 5 bp.
+- **Funding:** each symbol's real funding history.
+- **2× stress:** fees and slippage doubled; funding and the delisting penalty unchanged.
+- **Worst-of-minute stress:** stops fill at the 1m low for longs and the 1m high for shorts, plus slippage.
+
+### Sizing
+- **Slots:** 20, one sleeve per symbol worth 1/20 of the account. Each sleeve risks 6% of its own capital at the stop
+  with notional capped at 3× the sleeve. That is 0.30% of the account per trade and at most 0.15× per position.
+- **Accounting:** account daily return = Σ sleeve returns / 20, with empty sleeves at 0. Trade return = sleeve trade
+  return / 20.
+- **Cap:** at most 20 open positions, which means total risk at entry ≤ 6% and total notional ≤ 3×.
+  - When 20 are open, a new entry is skipped.
+  - A signal exit at the open frees its slot for entries in the same minute; a stop exit frees it from the next
+    minute.
+  - Simultaneous entries are admitted by better rank, then alphabetically.
+  - Skipped entries are reported.
+- **Two accounts:** gated (all gates) and full universe (information only).
+
+### Windows
+- **Stage A (dev):** 2020-04-01 → 2023-12-31.
+- **Stage B:** 2024-01-01 → 2026-09-30, the last complete month, because alt funding archives are monthly.
+  - It is unlocked once, only if U1 passes every Stage A gate, and the unlock is logged in `holdout_log.jsonl`.
+  - Every input is checked before the unlock, using file metadata and timestamps/volume only.
+  - If a crash leaves no results, the logged unlock may be resumed exactly once; the resume is logged too.
+  - Stage B starts flat.
+  - U1L passing alone does not unlock it.
+
+### Stage A gates (gated set)
+- **Trades:** at least 100, and at least 52 a year.
+- **Edge:** PF ≥ 1.2 in R, and t ≥ 2 on weekly portfolio returns (Monday–Sunday UTC).
+- **Stress:** mean R > 0 at 2× costs, and mean R > 0 under worst-of-minute stop fills.
+- **Random-entry null:** p < 0.05. Candidate entries come only from member bars. Holding times and directions are the
+  strategy's own; costs and seed are per symbol.
+- **Concentration:** no calendar year holds more than 50% of total R.
+- **Consistency:** at least 60% of gated symbols with 10+ trades have mean R > 0.
+- **Inherited from S1:** PBO ≤ 0.5 and plateau ≥ 70% (0.348 and 1.0), as F1 did in round 3.
+
+### Stage B gates (gated set)
+- At least 52 trades a year.
+- Mean R > 0.
+- Sharpe at least 50% of Stage A.
+- Trade-sequence max drawdown no worse than the 95th percentile of a block bootstrap of Stage A trades.
+- Weekly Sharpe > 0.
+
+### Verdict (gated daily returns 2020-04 → 2026-09, Stage A and Stage B concatenated)
+- **REPLICATED:** Stage A passes, Stage B passes, and PSR(0) ≥ 0.95 at N=1. N=1 is justified because the rule, its
+  parameters and the universe rule are all fixed before any of these markets' data is seen.
+- **STRICT:** REPLICATED, plus DSR ≥ 0.95 at the ratcheted N_eff (14.85 now).
+- The DSR on Stage A alone is reported as information.
+- **U1L rule:** U1L replaces U1 only if all three hold:
+  - U1L is REPLICATED;
+  - the PSR of its alpha is at least 0.95, after removing beta to an equal-weight buy-and-hold of the point-in-time
+    gated members;
+  - its alpha Sharpe beats U1's.
+
+### What each outcome means
+- **REPLICATED:** expand the paper bot to the universe at 0.30% risk. That is separate bot work.
+- **STRICT, or REPLICATED plus good forward paper results:** candidate for small real money.
+- **FAIL:** keep the 5-coin F1 paper bot. No retuning and no variants on this universe. Record that F1's edge may be
+  specific to those coins.
+
+### Reported, not gated
+- trade-level t;
+- results by year and by symbol;
+- the meme-coin and major-coin subsets;
+- the full universe;
+- the share of R from delisted coins;
+- concurrency and skipped entries;
+- the equal-weight buy-and-hold benchmark.
+
+### Disclosures
+- **Already seen:**
+  - F1 dev on the 5 majors, 2020–23;
+  - the F1 holdout on ETH/SOL/XRP/BNB, 2024–26;
+  - aggregate BTC behaviour, 2024–26;
+  - general knowledge of crypto 2020–26: the 2021 alt season, the LUNA and FTX collapses, the 2024 meme cycle.
+- **Volume ranks include 2024–26:** the universe file holds them, as volume only. The user approved this.
+- **Unchanged this round:** the paper bot and F1's parameters.
+- **Approximation:** the slot accounting rebalances sleeve capital daily, which is second-order compared with sizing
+  on live shared equity.
