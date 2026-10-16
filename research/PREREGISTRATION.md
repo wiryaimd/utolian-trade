@@ -563,3 +563,21 @@ lagging BTC) points toward success.
   - an equal-weight benchmark without funding;
   - a stitch with no basis adjustment;
   - SOL's long lookbacks warm up only in 2021.
+
+### Round 5 outcome and post-run notes (2026-10-17, after the dev sweep)
+- **D1 failed dev.**
+  - Failed: year share 0.610 (one year above 50%).
+  - Failed: alpha PSR against the equal-weight benchmark 0.884 (< 0.95).
+  - Passed: weekly t 2.49, shift null p 0.009, PBO 0.10, plateau 1.0, 2× costs, 5 of 5 coins positive.
+- **XS failed dev.**
+  - Failed: PBO 0.578 (> 0.5).
+  - Failed: weekly correlation with F1 0.441 (> 0.3).
+  - Failed: HAC alpha t against F1 1.41 (< 2).
+  - Passed: PF 1.42, weekly t 2.15, rank null p 0.041, leave-one-coin-out positive, plateau 1.0.
+- **Consequence (pre-registered):** both families are closed on these markets and no holdout was unlocked. F1 stays
+  alone, and the 1-trade/day target is retired for these 5 markets.
+- **Independent verification:** three rebuilds from raw dev data, written without project code, reproduced every
+  trade and gate value.
+- **Wording note:** the text above calls D1's alpha benchmark an "equal-weight buy-and-hold". The registered code
+  (7aed2c0) uses the daily-rebalanced equal-weight mean of the listed perps. Literal buy-and-hold variants give an
+  alpha PSR of 0.909–0.929, which also fails, and D1 fails the year-share gate independently.
