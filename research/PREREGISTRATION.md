@@ -936,3 +936,40 @@ Monte Carlo with iid Gaussian returns on 252 trading days a year and 5-day weeks
 
 - **Disclosure:** this amendment was written after seeing the data report's quality statistics (dates, null rows,
   equal closes, dev-only moves). No strategy was run and no holdout price was looked at.
+
+### Round 6 outcome (2026-10-17, after the dev sweep)
+- **M1 failed dev: 8 of 9 gates.**
+  - Weekly t 0.41 (< 2); account Sharpe 0.07 over 1986–2015.
+  - Mean daily return at 2× costs −1.2e-5 and under the funding stress −3.1e-5 (both ≤ 0); the funding stress cost
+    1.45%/yr.
+  - Year share 187% (2008 alone is 0.186 of a 0.099 total).
+  - 6 of 11 markets positive (< 7).
+  - Shift null p 0.211 (null mean −6.3e-6/day against the actual +9.1e-6, s.d. 2.0e-5, S_min 1,662).
+  - Plateau failed: fast5 −34%, slow5 +76% in total.
+  - Alpha PSR against the equal-weight benchmark 0.68 (< 0.95).
+  - Passed: PBO 0.0 (slow5 ranks first in and out of sample in every split).
+  - DSR 0.075 at N = 17.85. Own N_eff 1.35. No liquidations and no integrity errors.
+- **Consequence (pre-registered):** M1 is closed on these markets with this data, with no reruns or variants. The
+  2016–2026 holdout was not unlocked and stays unused.
+- **Reported, not gated:**
+  - Longs earned and shorts lost: −0.33 R per trade for shorts against −0.11 R for longs (R statistics carry the
+    0.1%-of-notional floor of the inherited R rule).
+  - Slow lookbacks earned and fast ones lost: the summed contributions run from −0.147 at L = 5 to +0.097 at L = 360.
+  - Activity from the full-book day (2011-06-14): 4.8 netted market orders per trading day, 20 sub-sleeve entries a
+    week, gross exposure 0.76 on average.
+  - Dividend-adjusted closes: Sharpe 0.12, weekly t 0.67.
+- **Independent verification (three verifiers):**
+  - A re-simulation without the project's engine, rule or runner reproduced all 13,087 base trades and 13,087 2×
+    trades, every gate value and all 1,000 null draws to float noise.
+  - A gate recompute with independent code matched all 9 gates, the PBO logits and the N_eff.
+  - A protocol audit found no breach: commit order, start and code hashes, the holdout log, the untouched crypto
+    registry, and no price dated 2016 or later in any result.
+- **Notes from the verification** (information only; no gate is affected):
+  - The profit factor in the summary is on R (0.86); on currency net it is 1.13.
+  - The long/short split sums compounded trade returns; the market and lookback splits sum daily returns.
+  - The reported 2× + funding mean takes the funding from the 2× run's own exposures.
+  - Some fast sub-sleeves lose almost all their capital without being liquidated (SPY L5 ends at 0.24% of its
+    capital); under the pre-registered sum/99 accounting they keep their full 1/99 weight.
+  - Red flag 9 was redefined in Amendment 1 after copper's null share had been seen (disclosed there). The script
+    that checked the candidate series is archived as `research/round6/amendment1_source_check.py`.
+  - `power_table.csv` now holds the Amendment 1 version; the original table is in commit `7c6f725`.
