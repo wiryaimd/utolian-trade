@@ -47,6 +47,8 @@ MIN_FREQ = 52
 MIN_SYM_TRADES = 10
 MIN_CONSISTENCY = 0.6
 DAY = pd.Timedelta(days=1)
+GAP_MS = TF_MS["1d"]           # > 24h without a traded minute = settlement / delisting
+COOLDOWN_MS = 7 * TF_MS["1d"]  # no new entries until 7 days after trading resumes
 
 
 @dataclass(frozen=True)
@@ -131,10 +133,41 @@ class Sleeve:
     bar_time: np.ndarray       # decision (bar close) time, ms
     slip: np.ndarray           # per-minute slippage at 1x
     force_exit: np.ndarray
-    delisted: bool
+    delisted: bool             # data ends (no trading) more than 24h before the stage end
     is_major: bool
     is_meme: bool
     member_months: int
+    settlement_gaps: int = 0   # >24h no-trade stretches inside the data (each forces an exit)
+    funding_filled_h: float = 0.0
+
+
+def no_trade_gaps(ts: np.ndarray, vol: np.ndarray, end_ms: int):
+    """Stretches of more than 24h without a traded minute, inside the data or running to end_ms.
+    Returns (index of the last traded minute before each, [(gap_start_ms, gap_end_ms), ...])."""
+    traded = np.flatnonzero(vol > 0)
+    if not len(traded):
+        return np.array([], np.int64), []
+    tt = ts[traded]
+    nxt = np.r_[tt[1:], end_ms]
+    g = np.flatnonzero(nxt - tt > GAP_MS)
+    return traded[g].astype(np.int64), list(zip(tt[g].tolist(), nxt[g].tolist()))
+
+
+def stage_last_traded(sym: str, stage: Stage) -> dict:
+    """Lock-free data facts for a stage, from ts/volume only (no prices): the last traded minute
+    before the stage end, whether the data ends early (a delisting under the rules), and the last
+    archived row of the whole file (to catch an incomplete archive)."""
+    m1 = pd.read_parquet(store.symbol_dir(sym) / "perp_1m.parquet", columns=["ts", "volume"])
+    ts = m1["ts"].to_numpy(np.int64)
+    vol = m1["volume"].to_numpy()
+    end_ms = int(stage.end.value // 10**6)
+    cut = ts < end_ms
+    live = np.flatnonzero(cut & (vol > 0))
+    last = int(ts[live[-1]]) if len(live) else None
+    _, gaps = no_trade_gaps(ts[cut], vol[cut], end_ms)
+    return {"last_traded": last, "ends_early": last is None or end_ms - last > GAP_MS,
+            "gaps": len(gaps) - int(bool(gaps) and gaps[-1][1] == end_ms),
+            "last_row": int(ts[-1]) if len(ts) else None}
 
 
 def membership(universe: pd.DataFrame, stage: Stage) -> dict[str, dict[str, int]]:
@@ -172,6 +205,11 @@ def make_sleeve(sym: str, stage: Stage, months: dict[str, int], cat_row: dict | 
     in_stage = (bar_time >= stage.start.value // 10**6) & (bar_time < stage.end.value // 10**6)
     rank_full = np.array([months.get(m, 99) for m in bar_month], dtype=np.int64)
     member_full = in_stage & (rank_full < 99)
+    fx_idx, gaps = np.array([], np.int64), []
+    if spec.clean_data:
+        fx_idx, gaps = no_trade_gaps(mk.ts, mk.m1["volume"].to_numpy(), int(stage.end.value // 10**6))
+        for a, b in gaps:   # no entries from a settlement until 7 days after trading resumes
+            member_full &= ~((bar_time >= a) & (bar_time < b + COOLDOWN_MS))
     possible = np.flatnonzero(member_full & (ex < len(mk.ts)))
     if not len(possible):
         return None
@@ -179,30 +217,27 @@ def make_sleeve(sym: str, stage: Stage, months: dict[str, int], cat_row: dict | 
     b0 = int(np.searchsorted(ex, s0, side="left"))
     cut = slice(s0, None)
     marks = mk.day_marks[mk.day_marks >= s0]
-    slim = SlimMarket(np.ascontiguousarray(mk.ts[cut]), np.ascontiguousarray(mk.o[cut]),
-                      np.ascontiguousarray(mk.h[cut]), np.ascontiguousarray(mk.l[cut]),
-                      np.ascontiguousarray(mk.c[cut]), np.ascontiguousarray(mk.fund[cut]),
-                      (marks - s0).astype(np.int64), mk.days[mk.day_marks >= s0],
-                      np.ascontiguousarray(ex[b0:] - s0), tf, spec.latency_min)
+    # .copy(): contiguous slices are views that would keep the whole loaded history alive
+    slim = SlimMarket(mk.ts[cut].copy(), mk.o[cut].copy(), mk.h[cut].copy(), mk.l[cut].copy(),
+                      mk.c[cut].copy(), mk.fund[cut].copy(), (marks - s0).astype(np.int64),
+                      mk.days[mk.day_marks >= s0], (ex[b0:] - s0).astype(np.int64), tf, spec.latency_min)
     n_tf = len(ex)
     sigs = {}
     for c, sg in sigs_full.items():
-        sigs[c] = tuple(np.ascontiguousarray(a[b0:]) for a in sg.arrays(n_tf))
+        sigs[c] = tuple(np.array(a[b0:], copy=True) for a in sg.arrays(n_tf))
     minute_month = pd.to_datetime(slim.ts, unit="ms", utc=True).strftime("%Y-%m").to_numpy()
     um, inv = np.unique(minute_month, return_inverse=True)
     slip = np.array([spec.slip(sym, months.get(m)) for m in um])[inv]
-    status = (cat_row or {}).get("status", "")
-    delisted = bool(spec.clean_data and flags["last_ts"] < int((stage.end - DAY).value // 10**6)
-                    and status != "TRADING")
-    if spec.clean_data and flags["last_ts"] < int((stage.end - DAY).value // 10**6) and not delisted:
-        raise RuntimeError(f"{sym}: data ends {pd.Timestamp(flags['last_ts'], unit='ms', tz='UTC')} "
-                           f"but the snapshot says {status!r}; fix the data before running")
     fx = np.zeros(len(slim.ts), np.bool_)
-    if delisted:
-        fx[-1] = True
-    return Sleeve(sym, slim, sigs, int(sigs_full[codes[0]].max_bars), np.ascontiguousarray(member_full[b0:]),
-                  np.ascontiguousarray(rank_full[b0:]), np.ascontiguousarray(bar_time[b0:]), slip, fx,
-                  delisted, sym in SYMBOLS, bool((cat_row or {}).get("is_meme", False)), len(months))
+    keep = fx_idx[fx_idx >= s0] - s0
+    fx[keep] = True
+    end_ms = int(stage.end.value // 10**6)
+    delisted = bool(gaps and gaps[-1][1] == end_ms)
+    del mk
+    return Sleeve(sym, slim, sigs, int(sigs_full[codes[0]].max_bars), member_full[b0:].copy(),
+                  rank_full[b0:].copy(), bar_time[b0:].copy(), slip, fx, delisted, sym in SYMBOLS,
+                  bool((cat_row or {}).get("is_meme", False)), len(months),
+                  len(gaps) - int(delisted), float(flags.get("funding_filled_h", 0.0)))
 
 
 def run_sleeve(sl: Sleeve, code: str, masked, spec: Spec, mult: float = 1.0,
@@ -357,6 +392,7 @@ def _sym_table(trades: pd.DataFrame, sleeves: dict[str, Sleeve], daily_by: dict[
                      "short_avg_R": float(t.loc[t["dir"] == -1, "R"].mean()) if (t["dir"] == -1).any() else 0.0,
                      "delist_exits": int((t["reason"] == "delist").sum()),
                      "is_meme": sl.is_meme, "is_major": sl.is_major, "delisted": sl.delisted,
+                     "settlement_gaps": sl.settlement_gaps, "funding_filled_h": sl.funding_filled_h,
                      "sharpe": float(d.mean() / d.std() * np.sqrt(365)) if d is not None and d.std() > 0 else 0.0})
     return rows
 
@@ -643,22 +679,28 @@ def cmd_download(stage_name: str, keep_raw: bool = False) -> pd.DataFrame:
         months = sorted(mem[sym])
         cov, fgap = _member_minutes_coverage(sym, months) if rep.get("status", "").startswith("ok") else (0.0, 1.0)
         status = cat.loc[sym, "status"] if sym in cat.index else ""
-        last = rep.get("last_traded") or rep.get("last")
-        ends_early = bool(last and pd.Timestamp(last) < st.end - 2 * DAY and status == "TRADING")
+        facts = stage_last_traded(sym, st) if str(rep.get("status", "")).startswith("ok") else {}
+        lt = facts.get("last_traded")
+        # An incomplete archive (still TRADING, rows stop before the stage end) is a data problem;
+        # trading that stops early is a delisting under the rules and is only reported.
+        archive_short = bool(status == "TRADING" and facts.get("last_row") is not None
+                             and facts["last_row"] < int((st.end - DAY).value // 10**6))
         rows.append({"symbol": sym, "member_months": len(months), "first_month": months[0], "last_month": months[-1],
-                     "status": rep.get("status"), "snapshot_status": status, "last_traded": last,
+                     "status": rep.get("status"), "snapshot_status": status,
+                     "last_traded_in_stage": pd.Timestamp(lt, unit="ms", tz="UTC").isoformat() if lt else None,
+                     "delisted_in_stage": bool(facts.get("ends_early")), "settlement_gaps": facts.get("gaps"),
                      "min_month_coverage": round(cov, 4), "funding_gap_share": round(fgap, 4),
-                     "ends_while_trading": ends_early,
+                     "archive_short": archive_short,
                      **{k: rep.get(k) for k in ("rows", "gaps_over_24h", "max_gap_h", "extreme_bars",
                                                 "ohlc_violations", "bars_4h_mismatch_share", "zero_volume_tail_min")}})
     df = pd.DataFrame(rows)
     df["red_flag"] = ((df["min_month_coverage"] < 0.9) | (df["funding_gap_share"] > 0.05)
-                      | df["ends_while_trading"] | ~df["status"].astype(str).str.startswith("ok"))
+                      | df["archive_short"] | ~df["status"].astype(str).str.startswith("ok"))
     U.write_csv(df, U.ROUND4_DIR / f"data_report_{stage_name}.csv")
     bad = df[df["red_flag"]]
     print(f"Stage {stage_name}: {len(df)} symbols built; {len(bad)} red flags")
     if len(bad):
-        print(bad[["symbol", "status", "min_month_coverage", "funding_gap_share", "ends_while_trading"]].to_string())
+        print(bad[["symbol", "status", "min_month_coverage", "funding_gap_share", "archive_short"]].to_string())
         raise SystemExit("data red flags: fix the data before any strategy run")
     return df
 
@@ -679,10 +721,20 @@ def _stage_sleeves(st: Stage, uni: pd.DataFrame, spec: Spec = SPEC) -> dict[str,
 def cmd_sweep(codes=CODES, rerun: bool = False) -> None:
     _require_committed([PREREG, SYMBOLS_CSV, OVERRIDES_CSV, UNIVERSE_CSV, U.ROUND4_DIR / "data_report_A.csv"])
     for c in codes:
-        if (RESULTS / f"{c}.json").exists() and not rerun:
-            raise SystemExit(f"{c}.json exists; Stage A runs once (use --rerun only with a version bump)")
+        p = RESULTS / f"{c}.json"
+        if p.exists():
+            if not rerun:
+                raise SystemExit(f"{c}.json exists; Stage A runs once (--rerun needs a version bump)")
+            if BY_CODE[c].version <= json.loads(p.read_text()).get("version", 0):
+                raise SystemExit(f"--rerun of {c} needs a strategy version bump (it counts as new trials)")
     st = STAGES["A"]
     uni = U.load_universe(UNIVERSE_CSV)
+    rep_a = pd.read_csv(U.ROUND4_DIR / "data_report_A.csv")
+    if rep_a["red_flag"].astype(str).eq("True").any():
+        raise SystemExit("data_report_A.csv has red flags: fix the data before the strategy runs")
+    missing = set(membership(uni, st)) - set(rep_a["symbol"])
+    if missing:
+        raise SystemExit(f"Stage A symbols missing from the data report: {sorted(missing)[:5]}")
     sleeves = _stage_sleeves(st, uni)
     gated = {s: sl for s, sl in sleeves.items() if not sl.is_major}
     print(f"Stage A: {len(sleeves)} sleeves ({len(gated)} gated)", flush=True)
@@ -709,7 +761,9 @@ def cmd_sweep(codes=CODES, rerun: bool = False) -> None:
                      "params": PARAMS | {"universe": UNIVERSE_ID, "slots": SPEC.slots, "risk": SPEC.account_risk},
                      "period": "dev", "sr": sr, "T": T, "skew": sk, "kurt": ku, "trades": ev["summary"]["trades"],
                      "sharpe_ann": ev["summary"].get("sharpe", 0.0)})
-        ev["daily"].rename(f"{code}_0").to_frame().to_parquet(RESULTS / f"{code}_trial_returns.parquet")
+        v = strat.version
+        ev["daily"].rename(f"{code}_0" if v == 1 else f"{code}_v{v}_0").to_frame().to_parquet(
+            RESULTS / (f"{code}_trial_returns.parquet" if v == 1 else f"{code}v{v}_trial_returns.parquet"))
     registry.record(rows)
     from btcq.research.run import all_trial_returns, cmd_gates
     trial = all_trial_returns()
@@ -741,39 +795,68 @@ def cmd_sweep(codes=CODES, rerun: bool = False) -> None:
     cmd_gates()
 
 
-def preflight_b() -> list[str]:
-    """Reasons Stage B may not be unlocked (empty = ok). Runs before anything touches the holdout."""
+def preflight_b() -> tuple[list[str], bool]:
+    """(reasons Stage B may not be unlocked, resume). Runs before anything touches the holdout and
+    checks every input cmd_validate needs, from file metadata and ts/volume only. `resume` is True
+    when a logged round 4 unlock never produced results (a crash): it may be resumed once."""
     probs = []
     p = RESULTS / f"{PRIMARY}.json"
     r = json.loads(p.read_text()) if p.exists() else {}
     if not r.get("dev_pass"):
         probs.append("U1 did not pass Stage A")
+    done = False
     for c in CODES:
         q = RESULTS / f"{c}.json"
-        if q.exists() and "holdout" in json.loads(q.read_text()):
+        if not q.exists():
+            probs.append(f"{c}.json missing")
+            continue
+        if "holdout" in json.loads(q.read_text()):
             probs.append(f"{c} holdout already evaluated")
+            done = True
+        for suffix in ("dev_trades", "dev_daily", "dev_benchmark"):
+            if not (RESULTS / f"{c}_{suffix}.parquet").exists():
+                probs.append(f"{c}_{suffix}.parquet missing")
     log = store.HOLDOUT_LOG.read_text() if store.HOLDOUT_LOG.exists() else ""
-    if "[R4" in log:
-        probs.append("holdout_log already has a round 4 unlock")
+    unlocks, resumes = log.count("[R4:"), log.count("[R4 resume")
+    resume = unlocks > 0 and not done
+    if unlocks > 1 or resumes > 1:
+        probs.append("holdout_log already has more than one round 4 unlock")
+    elif resume and resumes:
+        probs.append("the round 4 unlock was already resumed once")
     rep = U.ROUND4_DIR / "data_report_B.csv"
     if not rep.exists():
         probs.append("Stage B data report missing (run r4-download --stage B)")
-    else:
-        df = pd.read_csv(rep)
-        if df["red_flag"].astype(str).eq("True").any():
-            probs.append("Stage B data report has red flags")
-        uni = U.load_universe(UNIVERSE_CSV)
-        need = set(membership(uni, STAGES["B"]))
-        if need - set(df["symbol"]):
-            probs.append(f"Stage B symbols not built: {sorted(need - set(df['symbol']))[:5]}")
-    return probs
+        return probs, resume
+    df = pd.read_csv(rep)
+    if df["red_flag"].astype(str).eq("True").any():
+        probs.append("Stage B data report has red flags")
+    uni = U.load_universe(UNIVERSE_CSV)
+    need = set(membership(uni, STAGES["B"]))
+    if need - set(df["symbol"]):
+        probs.append(f"Stage B symbols not built: {sorted(need - set(df['symbol']))[:5]}")
+    cat = _catalogue().set_index("symbol")
+    end = STAGES["B"].end
+    for sym in sorted(need & set(df["symbol"])):
+        d = store.symbol_dir(sym)
+        if not ((d / "perp_1m.parquet").exists() and (d / "funding.parquet").exists()):
+            probs.append(f"{sym}: parquet missing")
+            continue
+        facts = stage_last_traded(sym, STAGES["B"])
+        trading = (cat.loc[sym, "status"] if sym in cat.index else "") == "TRADING"
+        if trading and (facts["last_row"] is None or facts["last_row"] < int((end - DAY).value // 10**6)):
+            probs.append(f"{sym}: archive ends before the stage end but the symbol is TRADING")
+        f = pd.read_parquet(d / "funding.parquet", columns=["ts"])["ts"]
+        if trading and not facts["ends_early"] and (not len(f) or int(f.max()) < int((end - DAY).value // 10**6)):
+            probs.append(f"{sym}: no funding on the last day of Stage B")
+    return probs, resume
 
 
 def cmd_validate(reason: str) -> None:
-    probs = preflight_b()
+    probs, resume = preflight_b()
     if probs:
         raise SystemExit("holdout stays locked: " + "; ".join(probs))
-    store.unlock_holdout(f"{reason} [R4: {','.join(CODES)}]")
+    tag = "[R4 resume" if resume else "[R4:"
+    store.unlock_holdout(f"{reason} {tag} {','.join(CODES)}]")
     st = STAGES["B"]
     uni = U.load_universe(UNIVERSE_CSV)
     sleeves = _stage_sleeves(st, uni)

@@ -161,7 +161,9 @@ def build_perp_only(symbol: str, keep_raw: bool = False) -> dict:
     verified = (len(back) == len(perp) and int(back["ts"].iloc[0]) == int(perp["ts"].iloc[0])
                 and int(back["ts"].iloc[-1]) == int(perp["ts"].iloc[-1]))
     report["parquet_verified"] = bool(verified)
-    if verified and not keep_raw:
+    if not verified:
+        report["status"] = "read_back_failed"
+    elif not keep_raw:
         for sub in ("monthly/klines", "daily/klines"):
             _rmtree(RAW_DIR / "futures" / "um" / sub / symbol)
         report["raw_deleted"] = True

@@ -279,6 +279,11 @@ def cmd_validate(codes: list[str], reason: str) -> None:
 
 
 def main() -> None:
+    import sys
+    # Some symbols have non-ASCII names; never let a console code page abort a long run.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="backslashreplace")
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["download", "sweep", "gates", "validate", "report", "r3-sweep",
                                     "r3-validate", "r4-symbols", "r4-universe", "r4-download", "r4-sweep",

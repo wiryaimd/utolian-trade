@@ -78,22 +78,52 @@ def catalogue(symbols: list[str], exinfo: dict, overrides: pd.DataFrame | None =
     return pd.DataFrame(rows)
 
 
+def _qv_frame(sym: str, paths) -> pd.DataFrame:
+    k = bv.parse_klines(paths)
+    return pd.DataFrame({"symbol": sym, "ts": k["ts"], "quote_volume": k["quote_volume"], "count": k["count"]})
+
+
+def _interior_missing_days(df: pd.DataFrame) -> list[str]:
+    days = df["ts"].to_numpy(np.int64) // DAY_MS
+    full = np.arange(days.min(), days.max() + 1)
+    miss = np.setdiff1d(full, days)
+    return list(pd.to_datetime(miss * DAY_MS, unit="ms", utc=True).strftime("%Y-%m-%d"))
+
+
 def download_daily_qv(symbols: list[str], concurrency: int = 16) -> pd.DataFrame:
-    """Daily quote volume (and trade count) per symbol from the 1d kline archive."""
-    prefix = bv.DATASETS["perp_1d_monthly"]
-    with ThreadPoolExecutor(concurrency) as ex:
-        listed = dict(zip(symbols, ex.map(lambda s: bv.list_keys(prefix.format(sym=s)), symbols)))
-    keys = [k for ks in listed.values() for k in ks]
-    bv.download_keys(keys, concurrency)
-    frames = []
-    for sym, ks in listed.items():
-        if ks:
-            k = bv.parse_klines([bv._local_path(x) for x in ks])
-            frames.append(pd.DataFrame({"symbol": sym, "ts": k["ts"], "quote_volume": k["quote_volume"],
-                                        "count": k["count"]}))
-    qv = pd.concat(frames, ignore_index=True)
+    """Daily quote volume (and trade count) per symbol from the 1d kline archive. Some monthly 1d
+    files are truncated (e.g. 2022-02 for many alts), so days missing inside a symbol's span are
+    patched from the daily 1d archive; days still missing afterwards had no archived trading.
+    Writes data/round4/daily_qv.parquet and daily_qv_patch.json (patched / still-missing days)."""
+    def lister(fmt):
+        with ThreadPoolExecutor(concurrency) as ex:
+            return dict(zip(symbols, ex.map(lambda s: bv.list_keys(fmt.format(sym=s)), symbols)))
+
+    listed = lister(bv.DATASETS["perp_1d_monthly"])
+    bv.download_keys([k for ks in listed.values() for k in ks], concurrency)
+    frames = {sym: _qv_frame(sym, [bv._local_path(x) for x in ks]) for sym, ks in listed.items() if ks}
+    holes = {sym: _interior_missing_days(df) for sym, df in frames.items()}
+    holes = {s: h for s, h in holes.items() if h}
+    patched, still = {}, {}
+    if holes:
+        fmt = bv.DATASETS["perp_1d_daily"]
+        with ThreadPoolExecutor(concurrency) as ex:
+            dlist = dict(zip(holes, ex.map(lambda s: bv.list_keys(fmt.format(sym=s)), holes)))
+        want = {s: [k for k in dlist[s] if bv.key_period(k) in set(h)] for s, h in holes.items()}
+        bv.download_keys([k for ks in want.values() for k in ks], concurrency)
+        for s, ks in want.items():
+            if ks:
+                add = _qv_frame(s, [bv._local_path(x) for x in ks])
+                frames[s] = pd.concat([frames[s], add]).drop_duplicates("ts").sort_values("ts")
+                patched[s] = len(add)
+            left = _interior_missing_days(frames[s])
+            if left:
+                still[s] = left
+    qv = pd.concat(frames.values(), ignore_index=True)
     QV_PATH.parent.mkdir(parents=True, exist_ok=True)
     qv.to_parquet(QV_PATH)
+    (QV_PATH.parent / "daily_qv_patch.json").write_text(json.dumps(
+        {"patched_days": patched, "still_missing_days": still}, indent=1, ensure_ascii=True) + "\n")
     return qv
 
 

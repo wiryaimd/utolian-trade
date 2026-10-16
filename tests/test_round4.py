@@ -178,10 +178,19 @@ def test_preflight_blocks_unlock(tmp_path, monkeypatch):
     with pytest.raises(SystemExit, match="did not pass Stage A"):
         round4.cmd_validate("x")
     (tmp_path / "U1.json").write_text(json.dumps({"dev_pass": True, "holdout": {}}))
-    (tmp_path / "holdout_log.jsonl").write_text('{"reason": "old [R4: U1,U1L]"}\n')
-    probs = round4.preflight_b()
-    assert any("already evaluated" in p for p in probs) and any("round 4 unlock" in p for p in probs)
-    assert any("data report missing" in p for p in probs)
+    probs, resume = round4.preflight_b()
+    assert any("already evaluated" in p for p in probs) and any("U1L.json missing" in p for p in probs)
+    assert any("U1_dev_benchmark.parquet missing" in p for p in probs)
+    assert any("data report missing" in p for p in probs) and not resume
+    # a logged unlock that never produced results may be resumed once, and only once
+    for c in ("U1", "U1L"):
+        (tmp_path / f"{c}.json").write_text(json.dumps({"dev_pass": True}))
+    (tmp_path / "holdout_log.jsonl").write_text('{"reason": "x [R4: U1,U1L]"}\n')
+    probs, resume = round4.preflight_b()
+    assert resume and not any("unlock" in p for p in probs)
+    (tmp_path / "holdout_log.jsonl").write_text('{"reason": "x [R4: U1,U1L]"}\n{"reason": "x [R4 resume U1,U1L]"}\n')
+    probs, resume = round4.preflight_b()
+    assert any("already resumed" in p for p in probs)
     assert calls == []
 
 
@@ -233,15 +242,37 @@ def test_make_sleeve_slicing_matches_a_full_run(monkeypatch):
     assert not sl.delisted and not sl.force_exit.any()
 
 
-def test_make_sleeve_delisting_and_early_end(monkeypatch):
+def test_no_trade_gaps():
+    m = 60_000
+    ts = np.arange(0, 4000 * m, m, dtype=np.int64)
+    vol = np.ones(len(ts))
+    vol[1000:2600] = 0.0                      # 26.7h flat, zero-volume stretch
+    idx, gaps = round4.no_trade_gaps(ts, vol, int(ts[-1]) + m)
+    assert list(idx) == [999] and gaps == [(999 * m, 2600 * m)]
+    idx, gaps = round4.no_trade_gaps(ts, vol, int(ts[-1]) + 30 * 3_600_000)   # data ends > 24h early
+    assert list(idx) == [999, 3999] and gaps[-1][1] == int(ts[-1]) + 30 * 3_600_000
+
+
+def test_make_sleeve_delisting_settlement_gap_and_cooldown(monkeypatch):
     t0 = int(pd.Timestamp("2021-01-01", tz="UTC").value // 10**6)
-    mk = engine.Market(make_m1(trend_path(100, 3), t0), None, synthetic_funding=0.0)
+    m1 = make_m1(trend_path(100, 3), t0)
+    g0 = int((pd.Timestamp("2021-03-01", tz="UTC").value // 10**6 - t0) // 60_000)
+    m1.loc[g0:g0 + 3 * 1440, "volume"] = 0.0          # a 3-day settlement stretch inside the data
+    mk = engine.Market(m1, None, synthetic_funding=0.0)
     st = Stage("T", "dev", pd.Timestamp("2021-02-01", tz="UTC"), pd.Timestamp("2021-06-01", tz="UTC"))
     monkeypatch.setattr(round4, "load_market", lambda sym, stage, sp: (mk, {"last_ts": int(mk.ts[-1])}))
-    sl = round4.make_sleeve("XUSDT", st, {"2021-02": 1, "2021-03": 1}, {"status": "SETTLING"}, Spec(), codes=["U1"])
-    assert sl.delisted and sl.force_exit[-1] and sl.force_exit.sum() == 1
-    with pytest.raises(RuntimeError, match="fix the data"):
-        round4.make_sleeve("XUSDT", st, {"2021-02": 1}, {"status": "TRADING"}, Spec(), codes=["U1"])
+    months = {"2021-02": 1, "2021-03": 1}
+    sl = round4.make_sleeve("XUSDT", st, months, {"status": "TRADING"}, Spec(), codes=["U1"])
+    # data ends on 2021-04-10, long before the stage end: a delisting whatever the snapshot says
+    assert sl.delisted and sl.force_exit[-1] and sl.settlement_gaps == 1 and sl.force_exit.sum() == 2
+    fx_ts = sl.mk.ts[np.flatnonzero(sl.force_exit)[0]]
+    assert fx_ts == t0 + (g0 - 1) * 60_000                       # last traded minute before the stretch
+    gap_end = t0 + (g0 + 3 * 1440 + 1) * 60_000
+    blocked = (sl.bar_time >= fx_ts) & (sl.bar_time < gap_end + round4.COOLDOWN_MS)
+    assert blocked.any() and not sl.member_bar[blocked].any()
+    april = int(pd.Timestamp("2021-04-01", tz="UTC").value // 10**6)
+    after = (sl.bar_time >= gap_end + round4.COOLDOWN_MS) & (sl.bar_time < april)
+    assert after.any() and sl.member_bar[after].all()
 
 
 @needs_data

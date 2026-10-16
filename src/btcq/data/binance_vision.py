@@ -30,6 +30,7 @@ DATASETS = {
     "perp_15m_monthly": "data/futures/um/monthly/klines/{sym}/15m/",
     "perp_4h_monthly": "data/futures/um/monthly/klines/{sym}/4h/",
     "perp_1d_monthly": "data/futures/um/monthly/klines/{sym}/1d/",
+    "perp_1d_daily": "data/futures/um/daily/klines/{sym}/1d/",
     "spot_1m_monthly": "data/spot/monthly/klines/{sym}/1m/",
     "funding_monthly": "data/futures/um/monthly/fundingRate/{sym}/",
     "metrics_daily": "data/futures/um/daily/metrics/{sym}/",
@@ -102,31 +103,35 @@ def _verified(path: Path) -> bool:
     ck = path.with_name(path.name + ".CHECKSUM")
     if not (path.exists() and ck.exists()):
         return False
-    expected = ck.read_text().split()[0].strip().lower()
+    # bytes, not text: CHECKSUM files name the archive, and some symbols are not ASCII
+    expected = ck.read_bytes().split()[0].decode("ascii").strip().lower()
     return hashlib.sha256(path.read_bytes()).hexdigest() == expected
 
 
 async def _fetch(client: httpx.AsyncClient, key: str, sem: asyncio.Semaphore) -> str | None:
-    path = _local_path(key)
-    if _verified(path):
+    try:
+        path = _local_path(key)
+        if _verified(path):
+            return None
+        path.parent.mkdir(parents=True, exist_ok=True)
+        async with sem:
+            for attempt in range(5):
+                try:
+                    body = (await client.get(BASE_URL + key)).raise_for_status().content
+                    ck = (await client.get(BASE_URL + key + ".CHECKSUM")).raise_for_status().content
+                    break
+                except httpx.HTTPError:
+                    if attempt == 4:
+                        return f"download failed: {key}"
+                    await asyncio.sleep(2 ** attempt)
+        expected = ck.split()[0].decode("ascii").strip().lower()
+        if hashlib.sha256(body).hexdigest() != expected:
+            return f"checksum mismatch: {key}"
+        path.write_bytes(body)
+        path.with_name(path.name + ".CHECKSUM").write_bytes(ck)
         return None
-    path.parent.mkdir(parents=True, exist_ok=True)
-    async with sem:
-        for attempt in range(5):
-            try:
-                body = (await client.get(BASE_URL + key)).raise_for_status().content
-                ck = (await client.get(BASE_URL + key + ".CHECKSUM")).raise_for_status().text
-                break
-            except httpx.HTTPError:
-                if attempt == 4:
-                    return f"download failed: {key}"
-                await asyncio.sleep(2 ** attempt)
-    expected = ck.split()[0].strip().lower()
-    if hashlib.sha256(body).hexdigest() != expected:
-        return f"checksum mismatch: {key}"
-    path.write_bytes(body)
-    path.with_name(path.name + ".CHECKSUM").write_text(ck)
-    return None
+    except Exception as e:  # noqa: BLE001 - one bad file must not abort the whole batch
+        return f"{type(e).__name__} on {key}: {e}"
 
 
 async def _download_all(keys: list[str], concurrency: int) -> list[str]:

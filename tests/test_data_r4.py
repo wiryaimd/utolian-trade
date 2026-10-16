@@ -1,5 +1,6 @@
 """Round 4 data plumbing: archive listing, perp-only builds, load-time helpers."""
 import io
+import json
 import zipfile
 
 import httpx
@@ -130,3 +131,50 @@ def test_build_perp_only_reports_no_data(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "PARQUET_DIR", tmp_path)
     monkeypatch.setattr(bv, "download", lambda name, symbol, keep=None, **kw: [])
     assert store.build_perp_only("GHOSTUSDT")["status"] == "no_1m"
+
+
+def test_checksum_files_with_non_ascii_names(tmp_path, monkeypatch):
+    import asyncio
+    import hashlib
+    monkeypatch.setattr(bv, "RAW_DIR", tmp_path)
+    body = b"zipbytes"
+    key = "data/futures/um/monthly/klines/\u9f99\u867eUSDT/1d/\u9f99\u867eUSDT-1d-2026-09.zip"
+    ck = (hashlib.sha256(body).hexdigest() + "  \u9f99\u867eUSDT-1d-2026-09.zip\n").encode("utf-8")
+
+    def handler(req):
+        return httpx.Response(200, content=ck if str(req.url).endswith(".CHECKSUM") else body)
+
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as c:
+            return await bv._fetch(c, key, asyncio.Semaphore(1))
+
+    assert asyncio.run(go()) is None
+    assert bv._verified(bv._local_path(key))
+
+
+def test_daily_qv_patches_truncated_monthly_files(tmp_path, monkeypatch):
+    from btcq.data import universe as U
+    monkeypatch.setattr(U, "QV_PATH", tmp_path / "qv.parquet")
+    day = U.DAY_MS
+    files = {}
+
+    def zip_rows(key, days):
+        path = tmp_path / key.replace("/", "_")
+        rows = [f"{T0 + d * day},1,1,1,1,10,{T0 + d * day + day - 1},{100 + d},5,4,40,0" for d in days]
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("x.csv", "\n".join(rows))
+        path.write_bytes(buf.getvalue())
+        files[key] = path
+        return key
+
+    iso = lambda d: pd.Timestamp(T0 + d * day, unit="ms", tz="UTC").strftime("%Y-%m-%d")  # noqa: E731
+    monthly = [zip_rows("m/AUSDT-1d-2022-01.zip", range(0, 10)), zip_rows("m/AUSDT-1d-2022-02.zip", range(13, 20))]
+    daily = [zip_rows(f"d/AUSDT-1d-{iso(d)}.zip", [d]) for d in (10, 11)]     # day 12 is not archived at all
+    monkeypatch.setattr(U.bv, "list_keys", lambda prefix, client=None: monthly if "/monthly/" in prefix else daily)
+    monkeypatch.setattr(U.bv, "download_keys", lambda keys, concurrency=16: [files[k] for k in keys])
+    monkeypatch.setattr(U.bv, "_local_path", lambda k: files[k])
+    qv = U.download_daily_qv(["AUSDT"], concurrency=1)
+    assert sorted(((qv["ts"] - T0) // day).tolist()) == list(range(0, 12)) + list(range(13, 20))
+    patch = json.loads((tmp_path / "daily_qv_patch.json").read_text())
+    assert patch["patched_days"] == {"AUSDT": 2} and patch["still_missing_days"] == {"AUSDT": [iso(12)]}
