@@ -334,8 +334,8 @@ def _summary(res, res3=(), res4=()) -> str:
         f"capped at {Risk().max_leverage:.0f}×.</p>",
         f'<div class="callout">{"".join(v)}</div>',
         '<div class="tiles">'
-        f'<div class="tile"><div class="label">Strategies tested</div><div class="value">{len(res) + len(res3)}</div>'
-        f'<div class="note">rounds 1–2: {len(res)}, round 3: {len(res3)}</div></div>'
+        f'<div class="tile"><div class="label">Strategies tested</div><div class="value">{len(res) + len(res3) + len(res4)}</div>'
+        f'<div class="note">rounds 1–2: {len(res)}, round 3: {len(res3)}, round 4: {len(res4)}</div></div>'
         f'<div class="tile"><div class="label">Configurations backtested</div><div class="value">{n_trials}</div>'
         f'<div class="note">effective N {n_eff:.1f} (ratcheted)</div></div>'
         f'<div class="tile"><div class="label">Passed dev gates</div><div class="value">{len(finalists) + len(f3)}</div>'
