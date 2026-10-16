@@ -5,6 +5,7 @@ import asyncio
 import hashlib
 import io
 import re
+import time
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree
@@ -28,6 +29,7 @@ DATASETS = {
     "perp_1m_daily": "data/futures/um/daily/klines/{sym}/1m/",
     "perp_15m_monthly": "data/futures/um/monthly/klines/{sym}/15m/",
     "perp_4h_monthly": "data/futures/um/monthly/klines/{sym}/4h/",
+    "perp_1d_monthly": "data/futures/um/monthly/klines/{sym}/1d/",
     "spot_1m_monthly": "data/spot/monthly/klines/{sym}/1m/",
     "funding_monthly": "data/futures/um/monthly/fundingRate/{sym}/",
     "metrics_daily": "data/futures/um/daily/metrics/{sym}/",
@@ -36,22 +38,60 @@ DATASETS = {
 }
 
 
-def list_keys(prefix: str) -> list[str]:
-    """List every .zip key under an S3 prefix (handles pagination)."""
-    keys: list[str] = []
-    marker = ""
-    with httpx.Client(timeout=60) as client:
-        while True:
-            r = client.get(LIST_URL, params={"delimiter": "/", "prefix": prefix, "marker": marker})
+def _get(client: httpx.Client, url: str, params: dict | None = None, tries: int = 6) -> httpx.Response:
+    """GET with exponential backoff on network errors, 429 and 5xx."""
+    for attempt in range(tries):
+        try:
+            r = client.get(url, params=params)
+            if r.status_code != 429 and r.status_code < 500:
+                return r.raise_for_status()
+        except httpx.TransportError:
+            if attempt == tries - 1:
+                raise
+        if attempt == tries - 1:
             r.raise_for_status()
+        time.sleep(2 ** attempt)
+    raise RuntimeError("unreachable")
+
+
+def _list(prefix: str, client: httpx.Client | None = None) -> tuple[list[str], list[str]]:
+    """All (Keys, CommonPrefixes) under an S3 prefix, following pagination."""
+    keys: list[str] = []
+    prefixes: list[str] = []
+    marker = ""
+    own = client is None
+    client = client or httpx.Client(timeout=60)
+    try:
+        while True:
+            r = _get(client, LIST_URL, {"delimiter": "/", "prefix": prefix, "marker": marker})
             root = ElementTree.fromstring(r.text)
             page = [k.text for k in root.iter(f"{_S3_NS}Key")]
-            keys += [k for k in page if k.endswith(".zip")]
-            truncated = root.findtext(f"{_S3_NS}IsTruncated") == "true"
-            if not truncated or not page:
+            pre = [p.findtext(f"{_S3_NS}Prefix") for p in root.iter(f"{_S3_NS}CommonPrefixes")]
+            keys += page
+            prefixes += pre
+            if root.findtext(f"{_S3_NS}IsTruncated") != "true" or not (page or pre):
                 break
-            marker = root.findtext(f"{_S3_NS}NextMarker") or page[-1]
-    return sorted(keys)
+            marker = root.findtext(f"{_S3_NS}NextMarker") or max(page + pre)
+    finally:
+        if own:
+            client.close()
+    return keys, prefixes
+
+
+def list_keys(prefix: str, client: httpx.Client | None = None) -> list[str]:
+    """List every .zip key under an S3 prefix (handles pagination)."""
+    return sorted(k for k in _list(prefix, client)[0] if k.endswith(".zip"))
+
+
+def list_prefixes(prefix: str, client: httpx.Client | None = None) -> list[str]:
+    """Child "directory" names under an S3 prefix, e.g. the symbols of a dataset."""
+    return sorted({p[len(prefix):].strip("/") for p in _list(prefix, client)[1]})
+
+
+def list_um_symbols() -> list[str]:
+    """Every USD-M futures symbol with kline archives (listed, delisted and dated contracts)."""
+    return sorted(set(list_prefixes("data/futures/um/monthly/klines/"))
+                  | set(list_prefixes("data/futures/um/daily/klines/")))
 
 
 def _local_path(key: str) -> Path:
@@ -105,6 +145,14 @@ def download(dataset: str, keep=lambda key: True, concurrency: int = 8,
              symbol: str = SYMBOL) -> list[Path]:
     """Download (and checksum-verify) every archive in a dataset. Returns local paths."""
     keys = [k for k in list_keys(DATASETS[dataset].format(sym=symbol)) if keep(k)]
+    errors = asyncio.run(_download_all(keys, concurrency))
+    if errors:
+        raise RuntimeError(f"{len(errors)} files failed, first: {errors[0]}")
+    return [_local_path(k) for k in keys]
+
+
+def download_keys(keys: list[str], concurrency: int = 16) -> list[Path]:
+    """Download (and checksum-verify) an explicit list of archive keys, e.g. across symbols."""
     errors = asyncio.run(_download_all(keys, concurrency))
     if errors:
         raise RuntimeError(f"{len(errors)} files failed, first: {errors[0]}")

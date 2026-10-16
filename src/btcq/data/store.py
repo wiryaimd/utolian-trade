@@ -6,12 +6,14 @@ history from before the perp archive begins.
 from __future__ import annotations
 
 import json
+import shutil
+import time
 from datetime import datetime, timezone
 
 import numpy as np
 import pandas as pd
 
-from btcq.config import (HOLDOUT_START, MINUTE_MS, OI_LAG_MS, PARQUET_DIR, PERP_START,
+from btcq.config import (HOLDOUT_START, MINUTE_MS, OI_LAG_MS, PARQUET_DIR, PERP_START, RAW_DIR,
                          RESEARCH_DIR, SPOT_START, SYMBOL, TF_MS)
 from btcq.data import binance_rest, binance_vision as bv
 
@@ -67,20 +69,7 @@ def build(symbol: str = SYMBOL, skip_metrics: bool = False) -> dict:
     monthly = dl("perp_1m_monthly")
     last_month = max(bv.key_period(str(p).replace("\\", "/")) for p in monthly)
     daily = dl("perp_1m_daily", keep=lambda k: bv.key_period(k)[:7] > last_month)
-    perp = bv.parse_klines(monthly + daily)
-    # Some monthly archives are truncated (e.g. SOL/XRP 2022-02 and 2022-03); patch the missing
-    # days from the daily archive.
-    holes = gap_report(perp)
-    if len(holes):
-        days = set()
-        for _, g in holes.iterrows():
-            for d in pd.date_range(g["after"].normalize(), g["before"].normalize(), freq="D"):
-                days.add(d.strftime("%Y-%m-%d"))
-        patch = dl("perp_1m_daily", keep=lambda k: bv.key_period(k) in days)
-        if patch:
-            perp = pd.concat([perp, bv.parse_klines(patch)]).drop_duplicates("ts") \
-                .sort_values("ts").reset_index(drop=True)
-        report["patched_days"] = sorted(days)
+    perp = _patch_holes(bv.parse_klines(monthly + daily), dl, report)
     tail =_try_rest(lambda: binance_rest.klines("1m", int(perp["ts"].iloc[-1]) + MINUTE_MS), report) \
         if symbol == SYMBOL else None
     if tail is not None:
@@ -117,6 +106,149 @@ def build(symbol: str = SYMBOL, skip_metrics: bool = False) -> dict:
     report["gaps_over_1m"] = len(gaps)
     report["missing_minutes"] = int(gaps["missing_minutes"].sum()) if len(gaps) else 0
     return report
+
+
+def _patch_holes(perp: pd.DataFrame, dl, report: dict) -> pd.DataFrame:
+    """Some monthly archives are truncated (e.g. SOL/XRP 2022-02 and 2022-03); patch the missing
+    days from the daily archive."""
+    holes = gap_report(perp)
+    if len(holes):
+        days = set()
+        for _, g in holes.iterrows():
+            for d in pd.date_range(g["after"].normalize(), g["before"].normalize(), freq="D"):
+                days.add(d.strftime("%Y-%m-%d"))
+        patch = dl("perp_1m_daily", keep=lambda k: bv.key_period(k) in days)
+        if patch:
+            perp = pd.concat([perp, bv.parse_klines(patch)]).drop_duplicates("ts") \
+                .sort_values("ts").reset_index(drop=True)
+        report["patched_days"] = sorted(days)
+    return perp
+
+
+def build_perp_only(symbol: str, keep_raw: bool = False) -> dict:
+    """Perp 1m + 4h + funding for any USD-M symbol, tolerating datasets the archive lacks
+    (new listings, delisted contracts). Writes build_report.json with data-quality checks.
+    Unless keep_raw, the raw kline zips are deleted after the parquet is read back and verified."""
+    out_dir = symbol_dir(symbol)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    report: dict = {"symbol": symbol, "status": "ok"}
+
+    def dl(name, **kw):
+        return bv.download(name, symbol=symbol, **kw)
+
+    monthly = dl("perp_1m_monthly")
+    last_month = max((bv.key_period(str(p).replace("\\", "/")) for p in monthly), default="")
+    daily = dl("perp_1m_daily", keep=lambda k: bv.key_period(k)[:7] > last_month)
+    if not monthly and not daily:
+        report["status"] = "no_1m"
+        return report
+    perp = _patch_holes(bv.parse_klines(monthly + daily), dl, report)
+    perp.to_parquet(_pq("perp_1m", symbol))
+
+    k4 = dl("perp_4h_monthly")
+    bars4 = bv.parse_klines(k4) if k4 else None
+    if bars4 is not None:
+        bars4.to_parquet(_pq("perp_4h_binance", symbol))
+    fk = dl("funding_monthly")
+    fund = bv.parse_funding(fk) if fk else pd.DataFrame({"ts": pd.Series([], dtype="int64"),
+                                                          "rate": pd.Series([], dtype="float64")})
+    fund.to_parquet(_pq("funding", symbol))
+    gaps = gap_report(perp)
+    gaps.to_csv(out_dir / "gaps_1m.csv", index=False)
+
+    report.update(_quality(perp, bars4, fund))
+    back = pd.read_parquet(_pq("perp_1m", symbol))
+    verified = (len(back) == len(perp) and int(back["ts"].iloc[0]) == int(perp["ts"].iloc[0])
+                and int(back["ts"].iloc[-1]) == int(perp["ts"].iloc[-1]))
+    report["parquet_verified"] = bool(verified)
+    if verified and not keep_raw:
+        for sub in ("monthly/klines", "daily/klines"):
+            _rmtree(RAW_DIR / "futures" / "um" / sub / symbol)
+        report["raw_deleted"] = True
+    (out_dir / "build_report.json").write_text(json.dumps(report, indent=1, default=str))
+    return report
+
+
+def _rmtree(path) -> None:
+    """Windows can briefly hold file handles (antivirus, indexer): retry before giving up."""
+    for attempt in range(5):
+        if not path.exists():
+            return
+        try:
+            shutil.rmtree(path)
+            return
+        except OSError:
+            time.sleep(1 + attempt)
+    shutil.rmtree(path)
+
+
+def _quality(perp: pd.DataFrame, bars4: pd.DataFrame | None, fund: pd.DataFrame) -> dict:
+    """Reported only; nothing is cleaned here."""
+    ts = perp["ts"].to_numpy(np.int64)
+    o, h, l, c = (perp[k].to_numpy() for k in ("open", "high", "low", "close"))
+    vol = perp["volume"].to_numpy()
+    d = np.diff(ts)
+    live = np.flatnonzero(vol > 0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        extreme = (h / l - 1 > 0.5) | (np.abs(c / o - 1) > 0.3)
+    q = {"rows": len(perp), "first": _iso(ts[0]), "last": _iso(ts[-1]),
+         "last_traded": _iso(ts[live[-1]]) if len(live) else None,
+         "zero_volume_tail_min": int(len(ts) - 1 - live[-1]) if len(live) else len(ts),
+         "monotonic_minutes": bool((d > 0).all() and (ts % MINUTE_MS == 0).all()),
+         "nonpositive_prices": int(((o <= 0) | (h <= 0) | (l <= 0) | (c <= 0)).sum()),
+         "ohlc_violations": int(((h < np.maximum(o, c)) | (l > np.minimum(o, c))).sum()),
+         "gaps_over_24h": int((d > TF_MS["1d"]).sum()),
+         "max_gap_h": round(float(d.max()) / 3_600_000, 2) if len(d) else 0.0,
+         "extreme_bars": int(extreme.sum()),
+         "funding_rows": len(fund)}
+    if len(fund):
+        f = fund["ts"].to_numpy(np.int64)
+        f = f[(f >= ts[0]) & (f <= ts[-1])]
+        fd = np.diff(np.r_[ts[0], f, ts[-1]])
+        q["funding_first"] = _iso(f[0]) if len(f) else None
+        q["funding_last"] = _iso(f[-1]) if len(f) else None
+        q["funding_gap_hours_over_9h"] = round(float(fd[fd > 9 * 3_600_000].sum()) / 3_600_000, 1)
+    if bars4 is not None and len(bars4):
+        mine = resample(perp, "4h").set_index("ts")["close"]
+        theirs = bars4.set_index("ts")["close"]
+        both = mine.index.intersection(theirs.index)
+        diff = (mine[both] - theirs[both]).abs() > 1e-9 * theirs[both].abs()
+        q["bars_4h_mismatch_share"] = round(float(diff.mean()), 6) if len(both) else None
+    return q
+
+
+def _iso(ms) -> str:
+    return pd.Timestamp(int(ms), unit="ms", tz="UTC").isoformat()
+
+
+def trading_span(m1: pd.DataFrame) -> pd.DataFrame:
+    """Drop the trailing stale minutes after the last bar with volume (e.g. a halted, delisted
+    contract that keeps printing flat zero-volume bars)."""
+    live = np.flatnonzero(m1["volume"].to_numpy() > 0)
+    if not len(live):
+        return m1.iloc[:0]
+    return m1.iloc[: live[-1] + 1].reset_index(drop=True)
+
+
+def fill_funding_gaps(fund: pd.DataFrame, first_ts: int, last_ts: int, rate: float,
+                      max_gap_ms: int = 9 * 3_600_000) -> tuple[pd.DataFrame, float]:
+    """Trim funding to [first_ts, last_ts] and fill every stretch longer than max_gap_ms without
+    a settlement (head, interior and tail) with `rate` at the 00/08/16 UTC settlements inside
+    it, at least 4h from its edges. Returns the frame and the hours of the filled stretches."""
+    f = fund[(fund["ts"] >= first_ts) & (fund["ts"] <= last_ts)][["ts", "rate"]]
+    edges = np.r_[first_ts, f["ts"].to_numpy(np.int64), last_ts]
+    step = 8 * 3_600_000
+    fill, hours = [], 0.0
+    for a, b in zip(edges[:-1], edges[1:]):
+        if b - a > max_gap_ms:
+            t = np.arange((a // step + 1) * step, b, step)
+            # keep 4h clear of the gap's edges so a fill never doubles a real settlement
+            fill.append(t[(t - a > step // 2) & (b - t > step // 2)])
+            hours += (b - a) / 3_600_000
+    if fill:
+        syn = pd.DataFrame({"ts": np.concatenate(fill).astype(np.int64), "rate": rate})
+        f = pd.concat([f, syn]).sort_values("ts")
+    return f.reset_index(drop=True), round(hours, 1)
 
 
 def _try_rest(fn, report: dict):
