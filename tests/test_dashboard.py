@@ -69,7 +69,7 @@ def test_http_requires_password_and_serves_page_and_api(replay_db):
         assert urllib.request.urlopen(base + "/healthz").read() == b"ok"
         auth = {"Authorization": "Basic " + base64.b64encode(b"admin:s3cret").decode()}
         page = urllib.request.urlopen(urllib.request.Request(base + "/", headers=auth)).read().decode()
-        assert "F1 trading monitor" in page
+        assert "Trading monitor" in page
         data = json.loads(urllib.request.urlopen(urllib.request.Request(base + "/api/data", headers=auth)).read())
         assert data["ready"] and data["books"]["F1"]["stats"]["n"] > 10
         bad = {"Authorization": "Basic " + base64.b64encode(b"admin:wrong").decode()}

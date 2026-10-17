@@ -9,6 +9,8 @@ from btcq.config import SLIPPAGE, SYMBOLS, Costs
 
 
 LIVE_ACK = "I_ACCEPT_REAL_ORDERS"
+# D1's registered universe (Round 5): pinned, so editing SYMBOLS for F1 never resizes or drops D1 sub-sleeves.
+D1_SYMBOLS = ("BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT")
 
 
 def _env(name: str, default: str) -> str:
@@ -27,6 +29,8 @@ class BotConfig:
     latency_min: int = 1                     # market orders fill one minute after the bar close
     taker_fee: float = Costs.taker
     shadow_long_only: bool = True            # also paper-trade F1 long-only for comparison
+    d1_shadow: bool = False                  # also paper-trade Round 5's D1 daily ensemble (env D1_SHADOW, on)
+    d1_symbols: list[str] = field(default_factory=lambda: list(D1_SYMBOLS))   # not an env setting
     history_bars: int = 1500                 # 4h bars kept for signal computation
     state_dir: Path = Path("state")
     telegram_token: str = ""
@@ -55,6 +59,7 @@ class BotConfig:
         c.max_leverage = float(_env("MAX_LEVERAGE", str(c.max_leverage)))
         c.max_drawdown_pause = float(_env("MAX_DRAWDOWN_PAUSE", str(c.max_drawdown_pause)))
         c.shadow_long_only = _env("SHADOW_LONG_ONLY", "true").lower() in ("1", "true", "yes")
+        c.d1_shadow = _env("D1_SHADOW", "true").lower() in ("1", "true", "yes")
         c.state_dir = Path(_env("STATE_DIR", str(c.state_dir)))
         c.telegram_token = _env("TELEGRAM_BOT_TOKEN", "")
         c.telegram_chat_id = _env("TELEGRAM_CHAT_ID", "")

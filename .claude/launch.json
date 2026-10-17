@@ -26,6 +26,20 @@
         "8766"
       ],
       "port": 8766
+    },
+    {
+      "name": "dashboard-d1",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "-m",
+        "btcq.live",
+        "dashboard",
+        "--db",
+        "state/replay_d1/bot.sqlite",
+        "--port",
+        "8767"
+      ],
+      "port": 8767
     }
   ]
 }

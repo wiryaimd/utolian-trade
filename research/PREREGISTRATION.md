@@ -973,3 +973,46 @@ Monte Carlo with iid Gaussian returns on 252 trading days a year and 5-day weeks
   - Red flag 9 was redefined in Amendment 1 after copper's null share had been seen (disclosed there). The script
     that checked the candidate series is archived as `research/round6/amendment1_source_check.py`.
   - `power_table.csv` now holds the Amendment 1 version; the original table is in commit `7c6f725`.
+
+## D1 shadow paper book (forward test), registered 2026-10-17 before it starts
+
+**Why.** At the user's request, Round 5's D1 runs on the paper bot next to F1. D1 failed Round 5's dev gates: one year
+made 61% of its profit, and it could not be told apart from simply holding the coins (alpha PSR 0.88 against the
+equal-weight hold). This run is information only. Its result can never, by itself, make D1 a validated strategy.
+
+**What runs** (code: `src/btcq/live/d1.py`, signals from `src/btcq/strategies/r5_d1.py` as registered in Round 5):
+- the Round 5 rule exactly: 5 coins (BTC, ETH, SOL, XRP, BNB USDT-M perps) × 9 lookbacks = 45 long-only sub-sleeves,
+  each starting with 1/45 of a $10,000 paper account and keeping its own cash;
+- decisions at each UTC daily close on the coin's full perp daily history; taker fills at the open of 00:01 with
+  Round 5's costs (5 bp fee, 1–2 bp slippage) and real funding;
+- one deviation from the backtest: Round 5 warmed up with spot data before each perp listed; live uses perp history
+  only. Every lookback has been flat at least once since then, so the states are the same today.
+- D1 is never paused. The Round 5 rule has no kill switch, so the bot's /pause, /resume and 35% drawdown pause act on
+  the F1 books only, and D1's drawdown baseline is never reset. A UTC day without prices is filled with the last
+  close and not traded, as the research calendar and engine do.
+- The coins are pinned to the five above, whatever the bot's SYMBOLS setting is. If D1 is ever switched off while
+  the bot runs on, its record ends there. A restart begins a new record (the bot says so), and only the current
+  record counts.
+- **Parity:** replaying the 2022-03 → 2023-05 archive through the bot reproduced `research.round5.d1_run` trade for
+  trade (entry and exit times, prices, returns, R and funding), including a restart in the middle of a day
+  (`tests/test_d1.py`).
+
+**How it will be judged:**
+- **Engineering checks from month 1** (dashboard): sub-trades per week near the research's 6.2, days with an order
+  near 64%, and drawdown within the research's 19%.
+- **First look after 12 months, verdict after 24 months.** D1 is called "promising" only if all three hold over the
+  forward period:
+  1. its alpha against an equal-weight hold of the 5 coins, rebalanced at each UTC daily close (OLS beta on daily
+     returns, PSR of the residual, as in Round 5), is ≥ 0.95;
+  2. its total return after costs and funding is positive;
+  3. its worst drawdown on end-of-day equity (as in the research) is ≤ 30%. The dashboard also shows a stricter
+     figure measured on every minute.
+- **Otherwise** D1 stays closed.
+- **Even if "promising",** real money needs a new pre-registered test and the user's decision. D1 never adds to
+  F1's risk.
+
+**Disclosures:**
+- 24 months is short. The result will most likely be inconclusive, and it depends on whether the period contains a
+  bear market.
+- The dashboard shows a running alpha estimate from day 30. Looking at it early changes nothing: the rule above is
+  the only verdict.

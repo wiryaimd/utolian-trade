@@ -21,7 +21,8 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from btcq.live.config import BotConfig
+from btcq.live.config import D1_SYMBOLS, BotConfig
+from btcq.live.d1 import ew_index, order_count, worst_drawdown
 from btcq.live.db import StateDB
 
 PAGE = Path(__file__).with_name("dashboard.html")
@@ -39,6 +40,160 @@ RESEARCH = {
     "losing_streak_normal": 23,
     "losing_streak_bad": 30,
 }
+
+
+# What Round 5's research saw for D1 (reports/results/D1.json, dev 2020-23, 5 coins, 45 sub-sleeves).
+D1_RESEARCH = {
+    "sub_trades_per_week": 6.2,          # completed sub-sleeve trades
+    "order_days_share": 0.64,            # days with at least one (netted) order
+    "max_dd": 0.19,
+    "sharpe": 1.35,
+    "cagr": 0.24,
+}
+D1_RULE = ("Pre-registered (research/PREREGISTRATION.md, 'D1 shadow paper book'): D1 failed Round 5 and runs here as "
+           "information only. First look after 12 months, verdict after 24: 'promising' only if D1 beats an "
+           "equal-weight hold of the 5 coins after removing market exposure (alpha PSR >= 0.95), its total return is "
+           "positive and its worst drawdown stays <= 30%. Even then, real money needs a new pre-registered test and "
+           "your decision. A 1-2 year paper run will most likely be inconclusive.")
+
+
+def _norm_cdf(x: float) -> float:
+    return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+
+
+def alpha_vs_hold(d1_ret: list[float], bench_ret: list[float]) -> dict | None:
+    """OLS beta of D1's daily returns on the equal-weight hold, and the PSR of the residual (as in Round 5)."""
+    n = len(d1_ret)
+    if n < 30:
+        return None
+    y = [float(v) for v in d1_ret]
+    x = [float(v) for v in bench_ret]
+    mx, my = sum(x) / n, sum(y) / n
+    vx = sum((a - mx) ** 2 for a in x) / (n - 1)
+    beta = sum((a - mx) * (b - my) for a, b in zip(x, y)) / (n - 1) / vx if vx > 0 else 0.0
+    r = [b - beta * a for a, b in zip(x, y)]
+    m = sum(r) / n
+    sd = math.sqrt(sum((v - m) ** 2 for v in r) / (n - 1)) if n > 1 else 0.0
+    if sd == 0:
+        return {"days": n, "beta": beta, "alpha_ann": m * 365, "sharpe_alpha_ann": 0.0, "psr_alpha": 0.5}
+    sr = m / sd
+    m2 = sum((v - m) ** 2 for v in r) / n
+    skew = (sum((v - m) ** 3 for v in r) / n) / m2 ** 1.5 if m2 > 0 else 0.0
+    kurt = (sum((v - m) ** 4 for v in r) / n) / m2 ** 2 if m2 > 0 else 3.0
+    den = 1.0 - skew * sr + (kurt - 1.0) / 4.0 * sr * sr
+    psr = _norm_cdf(sr * math.sqrt(n - 1) / math.sqrt(den)) if den > 0 else 0.0
+    return {"days": n, "beta": beta, "alpha_ann": m * 365, "sharpe_alpha_ann": sr * math.sqrt(365), "psr_alpha": psr}
+
+
+def d1_panel(snap: dict, state: dict, closes: list[tuple], equity: list[tuple], snaps: list[tuple],
+             trades: list[dict], start_equity: float, now_ts: int | None, symbols: list[str]) -> dict:
+    """Everything the dashboard shows about the D1 shadow book. Only D1's current record counts: rows from
+    before its start (a D1 that was switched off and on again starts a new record) are ignored."""
+    day = 86_400_000
+    started = state.get("started")
+    eq = snap["equity"]
+    by_coin = {}
+    for x in snap.get("subs", []):
+        c = by_coin.setdefault(x["symbol"], {"symbol": x["symbol"], "open": 0, "lookbacks": [], "notional": 0.0,
+                                             "upnl": 0.0})
+        c["open"] += 1
+        c["lookbacks"].append(x["lookback"])
+        c["notional"] += x["notional"] or 0.0
+        c["upnl"] += x["upnl"] or 0.0
+    coins = [{"symbol": s, "open": 0, "lookbacks": [], "notional": 0.0, "upnl": 0.0, **by_coin.get(s, {})}
+             for s in symbols]
+    for c in coins:
+        c["exposure"] = c["notional"] / eq if eq else None
+
+    # the pre-registered benchmark: equal-weight hold of the coins, rebalanced at each daily close
+    by_day: dict[int, dict] = {}
+    for s, d, c in closes:
+        if started is not None and int(d) + day > started:
+            by_day.setdefault(int(d), {})[s] = float(c)
+    idx = ew_index(state.get("start_close", {}), started, by_day, state.get("last_close", {}), now_ts)
+    hold_series = [[t, g * start_equity] for t, g in idx]
+    hold_return = idx[-1][1] - 1 if len(idx) > 1 else None
+
+    # alpha: D1's end-of-day equity against the same index's daily returns
+    eq_days = {int(d): float(v) for d, v in equity if started is not None and int(d) + day > started}
+    d1_ret, bench_ret, prev = [], [], None
+    for d in sorted(by_day):
+        if prev is not None:
+            rs = [by_day[d][s] / by_day[prev][s] - 1 for s in by_day[d] if by_day[prev].get(s, 0) > 0]
+            if d in eq_days and prev in eq_days and eq_days[prev] > 0 and rs:
+                d1_ret.append(eq_days[d] / eq_days[prev] - 1)
+                bench_ret.append(sum(rs) / len(rs))
+        prev = d
+
+    # the registered rule is on end-of-day equity (as in the research); the minute-level figure is the stricter extra
+    worst_eod = worst_drawdown([eq_days[d] for d in sorted(eq_days)], start_equity)
+    worst = max(float(state.get("worst_dd", 0.0) or 0.0), snap["drawdown"], worst_eod, 0.0)
+    run_ms = max((now_ts or 0) - started, 0) if started is not None else 0
+    n_days, weeks = int(run_ms // day), run_ms / (7 * day)
+    subs = snap.get("subs", [])
+    order_days = {ts // day for t in trades for ts in (t["entry_time"], t["exit_time"])} | {x["since"] // day
+                                                                                             for x in subs}
+    out = {
+        "equity": eq, "start_equity": start_equity, "return": eq / start_equity - 1 if start_equity else None,
+        "drawdown": max(snap["drawdown"], 0.0), "max_drawdown": worst, "max_drawdown_eod": worst_eod,
+        "paused": snap["paused"],
+        "slots": snap.get("slots"), "open_subs": len(subs), "coins": coins, "subs": subs, "started": started,
+        "hold_return": hold_return, "hold_series": hold_series, "days_running": n_days,
+        "closed_trades": len(trades), "sub_trades_per_week": (len(trades) / weeks) if weeks >= 1 else None,
+        "orders_last_7d": order_count(trades, subs, (now_ts or 0) - 7 * day),
+        "order_days_share": (len(order_days) / n_days) if n_days >= 14 else None,
+        "alpha": alpha_vs_hold(d1_ret, bench_ret), "research": D1_RESEARCH, "rule": D1_RULE,
+    }
+    out["health"] = d1_health(out)
+    return out
+
+
+def d1_health(p: dict) -> list[dict]:
+    R = D1_RESEARCH
+    out = []
+
+    def add(name, status, value, expect, note):
+        out.append({"name": name, "status": status, "value": value, "expect": expect, "note": note})
+
+    n_days = p["days_running"]
+    if n_days >= 28 and p["sub_trades_per_week"] is not None:
+        v = p["sub_trades_per_week"]
+        st = "ok" if 2.0 <= v <= 12.0 else "watch"
+        add("D1 sub-trades per week", st, f"{v:.1f}", f"about {R['sub_trades_per_week']}",
+            "Trading at roughly the research pace." if st == "ok" else
+            "Pace differs from the research (it depends on how trendy the market is); judge over months.")
+    else:
+        add("D1 sub-trades per week", "wait", f"{p['closed_trades']} closed so far", f"about {R['sub_trades_per_week']}",
+            "Needs about 4 weeks before the pace means anything.")
+    if p["order_days_share"] is not None and n_days >= 28:
+        v = p["order_days_share"]
+        st = "ok" if 0.35 <= v <= 0.9 else "watch"
+        add("D1 days with an order", st, f"{v:.0%}", f"about {R['order_days_share']:.0%}",
+            "Most days it adjusts at least one coin, as in the research." if st == "ok" else
+            "Fewer or more order days than the research saw.")
+    else:
+        add("D1 days with an order", "wait", f"{p['orders_last_7d']} orders in the last 7 days",
+            f"about {R['order_days_share']:.0%} of days", "Needs about 4 weeks of running.")
+    eod, worst, dd = p["max_drawdown_eod"] or 0.0, p["max_drawdown"] or 0.0, p["drawdown"] or 0.0
+    e = round(eod, 9)                         # 1 - 7000/10000 is 0.30000000000000004
+    st = "ok" if e < 0.20 else "watch" if e <= 0.30 else "bad"
+    add("D1 worst drawdown", st, f"worst {eod:.1%} end-of-day ({worst:.1%} within a day; now {dd:.1%})",
+        f"research max {R['max_dd']:.0%}; rule limit 30%, both on end-of-day equity",
+        "Within what the research saw." if st == "ok" else
+        "Deeper than the research's worst." if st == "watch" else "Beyond the pre-registered 30% limit.")
+    a = p["alpha"]
+    if a is None or n_days < 365:
+        add("D1 vs holding the coins", "wait",
+            "not enough data" if a is None else f"alpha PSR {a['psr_alpha']:.2f} over {a['days']} days",
+            "first look at 12 months, verdict at 24",
+            "Whether D1 adds anything beyond simply holding the 5 coins can't be judged from a few months.")
+    else:
+        st = "ok" if a["psr_alpha"] >= 0.95 else "watch"
+        add("D1 vs holding the coins", st, f"alpha PSR {a['psr_alpha']:.2f} ({a['alpha_ann']:+.1%}/yr, beta {a['beta']:.2f})",
+            ">= 0.95 to be called promising",
+            "D1 is beating the market exposure it carries so far." if st == "ok" else
+            "No convincing evidence yet that D1 beats holding the coins.")
+    return out
 
 
 def _clean(x):
@@ -200,9 +355,12 @@ class DashboardData:
         meta = db.meta("config", {}) or {}
         source = db.meta("source", "live")
         books = meta.get("books") or list(st.get("books", {}))
-        cfg = BotConfig(symbols=meta.get("symbols") or sorted({s for b in st["books"].values() for s in b["pos"]}),
+        cfg = BotConfig(symbols=meta.get("symbols") or sorted({s for b in st["books"].values()
+                                                               for s in b.get("pos", b.get("last_close", {}))}),
                         initial_equity=meta.get("initial_equity", 10_000.0),
-                        shadow_long_only="F1-long" in books)
+                        shadow_long_only="F1-long" in books, d1_shadow="D1" in books,
+                        d1_symbols=meta.get("d1_symbols") or st["books"].get("D1", {}).get("symbols")
+                        or list(D1_SYMBOLS))
         from btcq.live.trader import Trader
         trader = Trader(cfg)
         trader.restore(st)
@@ -218,15 +376,36 @@ class DashboardData:
         weeks = max((end_ts - first_ts) / (7 * 86_400_000), 0.0)
 
         live_name = meta.get("live_book")
-        trades = db.trades()
         by_book: dict[str, list] = {}
-        for t in trades:
+        for t in db.trades():
             by_book.setdefault(t["book"], []).append(t)
+        # each book's own clock (from its first snapshot), so a book added later is not divided by F1's time
+        book_weeks: dict[str, float] = {}
+        for book, ts, *_ in all_snaps:
+            book_weeks.setdefault(book, max((end_ts - ts) / (7 * 86_400_000), 0.0))
 
+        d1 = None
+        if "D1" not in snap:                  # D1 switched off: its ended record is not shown
+            by_book.pop("D1", None)
+            all_snaps = [r for r in all_snaps if r[0] != "D1"]
+        if "D1" in snap:
+            d1_state = trader.books["D1"].state()
+            started = trader.books["D1"].started
+            # only D1's current record (see d1_panel); it has nothing yet while D1 has not seen a minute
+            by_book["D1"] = [t for t in by_book.get("D1", []) if started is not None and t["entry_time"] >= started]
+            book_weeks["D1"] = max((end_ts - started) / (7 * 86_400_000), 0.0) if started is not None else 0.0
+            cut = started // 900_000 * 900_000 if started is not None else None
+            all_snaps = [r for r in all_snaps if r[0] != "D1" or (cut is not None and r[1] >= cut)]
+            d1 = d1_panel(snap["D1"], d1_state, db.daily_closes(), db.equity_curve("D1"),
+                          [(r[1], r[2]) for r in all_snaps if r[0] == "D1"], by_book.get("D1", []),
+                          cfg.initial_equity, data_ts, trader.books["D1"].symbols)
+        # newest 300 closed trades per book, so a busy book (D1) never pushes another out of the payload
+        trades = [t for ts_ in by_book.values() for t in ts_[:300]]
         out_books = {}
         for name, s in snap.items():
             out_books[name] = {**s, "start_equity": cfg.initial_equity, "role": "model" if live_name == name else
-                               ("main" if name == "F1" else "shadow"), "stats": book_stats(by_book.get(name, []), weeks)}
+                               ("main" if name == "F1" else "shadow"),
+                               "stats": book_stats(by_book.get(name, []), book_weeks.get(name, weeks))}
 
         live = None
         if live_name and st.get("live"):
@@ -278,8 +457,8 @@ class DashboardData:
             "symbols": cfg.symbols, "risk_per_trade": meta.get("risk_per_trade"),
             "kill_switch": meta.get("max_drawdown_pause", 0.35), "main": main_name,
             "books": out_books, "live": live, "series": series,
-            "trades": sorted(trades, key=lambda t: t["exit_time"], reverse=True)[:300],
-            "events": db.events(150), "per_symbol": per_symbol, "research": RESEARCH,
+            "trades": sorted(trades, key=lambda t: t["exit_time"], reverse=True),
+            "events": db.events(150), "per_symbol": per_symbol, "research": RESEARCH, "d1": d1,
             "health": [h for h in [access_check(self.access)] if h] + health_checks(
                 main, main["stats"], weeks, data_age, source == "replay", live, meta.get("max_drawdown_pause", 0.35)),
         }

@@ -1,6 +1,7 @@
 """Wires bars, signals and paper books together. Feed-agnostic: replay and live share it."""
 from __future__ import annotations
 
+import logging
 import math
 from typing import Callable
 
@@ -10,9 +11,11 @@ from btcq.config import TF_MS
 from btcq.live.bars import BarBuilder, Minute, SignalRunner
 from btcq.live.book import BookConfig, PaperBook
 from btcq.live.config import BotConfig
+from btcq.live.d1 import D1Book
 from btcq.strategies.r3_trend import S1Frozen, S1FrozenLong
 
 F1_PARAMS = {"n": 40, "k": 3.5, "exit": "channel"}
+log = logging.getLogger("btcq.trader")
 
 
 def default_books(cfg: BotConfig) -> list[tuple[str, object, dict]]:
@@ -37,6 +40,11 @@ class Trader:
                         slippage={s: cfg.slippage(s) for s in cfg.symbols}, latency_min=cfg.latency_min,
                         max_drawdown_pause=cfg.max_drawdown_pause)
         self.books = {name: PaperBook(name, cfg.symbols, bc, self._event) for name, _, _ in spec}
+        # Round 5 D1 daily ensemble, paper shadow: its own daily decisions, its registered coins only
+        if cfg.d1_shadow and set(cfg.d1_symbols) <= set(cfg.symbols):
+            self.books["D1"] = D1Book("D1", list(cfg.d1_symbols), bc, self._event)
+        elif cfg.d1_shadow:
+            log.warning("D1 shadow book left off: it needs %s in SYMBOLS", ", ".join(cfg.d1_symbols))
         self.runners = {name: SignalRunner(strat, params) for name, strat, params in spec}
         self.builders: dict[str, BarBuilder] = {}
         # Called as hook(book_name, symbol, bar_end_ms, decision, bar_close) when a bar closes;
@@ -53,6 +61,11 @@ class Trader:
     def bootstrap(self, symbol: str, history: pd.DataFrame) -> None:
         """Load closed strategy-timeframe bars that precede the first minute to be processed."""
         self.builders[symbol] = BarBuilder(self.tf, history, self.cfg.history_bars)
+
+    def bootstrap_daily(self, symbol: str, daily: pd.DataFrame | None) -> None:
+        """Closed daily bars before the D1 book's first minute (it keeps each coin's full daily history)."""
+        if "D1" in self.books:
+            self.books["D1"].bootstrap(symbol, daily)
 
     # ------------------------------------------------------------ the pipeline
 
@@ -96,9 +109,12 @@ class Trader:
                     positions.append({"symbol": s, "dir": p.dir, "entry_px": p.epx, "stop": p.sl, "last": last,
                                       "qty": p.qty, "upnl": upnl, "R_open": upnl / p.e_risk if p.e_risk else 0.0,
                                       "since": p.e_time})
-            out[name] = {"equity": bk.equity(), "cash": bk.cash, "peak": bk.peak, "drawdown": bk.drawdown(),
-                         "paused": bk.paused, "paused_reason": bk.paused_reason, "positions": positions,
-                         "n_trades": len(bk.trades)}
+            out[name] = {"equity": bk.equity(), "cash": bk.cash if not isinstance(bk.cash, dict) else sum(bk.cash.values()),
+                         "peak": bk.peak, "drawdown": bk.drawdown(), "paused": bk.paused,
+                         "paused_reason": bk.paused_reason, "positions": positions, "n_trades": len(bk.trades)}
+            if hasattr(bk, "sub_snapshot"):
+                out[name]["subs"] = bk.sub_snapshot()
+                out[name]["slots"] = bk.slots
         return out
 
     def state(self) -> dict:
@@ -109,7 +125,10 @@ class Trader:
     def restore(self, st: dict) -> None:
         for n, bst in st.get("books", {}).items():
             if n in self.books:
-                self.books[n].restore(bst)
+                try:
+                    self.books[n].restore(bst)
+                except ValueError as e:          # a D1 state for other coins: D1 starts a new record (app warns)
+                    log.warning("%s state not restored: %s", n, e)
         for s, bst in st.get("builders", {}).items():
             if s in self.builders:
                 self.builders[s].restore(bst)

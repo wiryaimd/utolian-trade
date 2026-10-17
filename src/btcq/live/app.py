@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from btcq.config import MINUTE_MS, TF_MS
 from btcq.live.bars import Minute
 from btcq.live.config import BotConfig
+from btcq.live.d1 import order_count, restore_problem
 from btcq.live.db import StateDB
 from btcq.live.feed import now_ms
 from btcq.live.trader import Trader
@@ -18,9 +19,9 @@ log = logging.getLogger("btcq.app")
 SIDE = {1: "LONG", -1: "SHORT"}
 SNAP_MS = 15 * 60_000
 HELP = ("<b>Commands</b>\n/status: equity, drawdown, open positions\n/positions: open positions in detail\n"
-        "/trades [n]: last n closed trades (default 10)\n/pause: stop opening new positions\n"
-        "/resume: allow new positions again\n/close SYMBOL: paper-close a position now\n"
-        "/compare: F1 vs long-only shadow\n/help: this list")
+        "/trades [n]: last n closed trades (default 10)\n/pause: stop opening new F1 positions\n"
+        "/resume: allow new F1 positions again\n/close SYMBOL: paper-close a position now\n"
+        "/compare: F1 vs long-only shadow\n/d1: D1 daily shadow book vs holding the coins\n/help: this list")
 
 
 def _t(ms: int) -> str:
@@ -71,25 +72,81 @@ class App:
                 return (int(last) + MINUTE_MS) // tf_ms * tf_ms
         return start_ms // tf_ms * tf_ms
 
+    def _cutoff_daily(self, symbol: str, st: dict | None, start_ms: int) -> int:
+        """D1's daily history ends where its first unprocessed (or restored partial) day begins."""
+        day = TF_MS["1d"]
+        if st:
+            partial = (st.get("books", {}).get("D1", {}).get("partial") or {}).get(symbol)
+            if partial:
+                return int(partial[0])
+            last = st.get("last_minute", {}).get(symbol)
+            if last is not None:
+                return (int(last) + MINUTE_MS) // day * day
+        return self.first_minute(symbol, start_ms) // day * day
+
+    def _check_d1_state(self, st: dict | None) -> None:
+        """Starts D1 on a fresh record (with a warning) when its saved state can't be continued; says so when
+        D1 starts for the first time."""
+        b = self.trader.books.get("D1")
+        saved = (st or {}).get("books", {}).get("D1")
+        if b is None:
+            why = (f"it needs {', '.join(self.cfg.d1_symbols)} in SYMBOLS" if self.cfg.d1_shadow
+                   else "D1_SHADOW=false")
+            if saved or self.cfg.d1_shadow:
+                self.outbox.append(f"⚠️ D1 shadow book is off ({why})"
+                                   + (": its record ends here." if saved else "."))
+            return
+        problem = restore_problem(saved, b.symbols, st.get("last_minute", {})) if saved else None
+        if not saved and self._had_d1():
+            problem = "D1 was switched off while the bot ran on, so its previous record ended"
+        if problem:
+            if saved:
+                st["books"].pop("D1")
+            self.outbox.append(f"⚠️ D1 starts a new record from ${self.cfg.initial_equity:,.0f}: {problem} "
+                               f"(its old rows stay in the database).")
+        elif not saved:
+            self.outbox.append("🆕 D1 shadow book started (paper, information only). Its first orders follow the next "
+                               "00:00 UTC daily close. /d1 shows how it is doing.")
+
+    def _had_d1(self) -> bool:
+        """Whether an earlier D1 record exists (D1 snapshots are written every 15 minutes it runs)."""
+        return bool(self.db.conn.execute("SELECT 1 FROM snapshots WHERE book='D1' LIMIT 1").fetchone()
+                    or self.db.trades("D1", 1))
+
     async def start(self, start_ms: int) -> None:
         st = self.db.load_state()
+        self._check_d1_state(st)
         for s in self.cfg.symbols:
             hist = await self.feed.history(s, self._cutoff(s, st, start_ms), self.trader.tf,
                                            self.cfg.history_bars)
             self.trader.bootstrap(s, hist)
+            if "D1" in self.trader.books:
+                daily = await self.feed.history(s, self._cutoff_daily(s, st, start_ms), "1d", 5000)
+                self.trader.bootstrap_daily(s, daily)
         if st:
             self.trader.restore(st)
             if self.executor and st.get("live"):
                 self.executor.restore(st["live"])
+            for name, b in self.trader.books.items():   # closed trades are not in the state: reload them
+                if name in st.get("books", {}):
+                    since = getattr(b, "started", None) or 0
+                    b.trades = [t for t in reversed(self.db.trades(name)) if (t["entry_time"] or 0) >= since]
             log.info("restored state; last minutes %s", {s: _t(v) for s, v in self.trader.last_minute.items()})
+        # the daily summary's "% day" starts from the previous day's closing equity, also across a restart
+        prev = (self.trader.day - 1) * TF_MS["1d"] if st and self.trader.day is not None else None
         for name, b in self.trader.books.items():
-            self.day_start_eq.setdefault(name, b.equity())
+            row = (dict(self.db.equity_curve(name)).get(prev)
+                   if prev is not None and name in st.get("books", {}) else None)
+            if hasattr(b, "started") and (b.started is None or prev + TF_MS["1d"] <= b.started):
+                row = None              # D1: that row belongs to a record that ended
+            self.day_start_eq.setdefault(name, row if row is not None else b.equity())
 
     def _meta_config(self) -> dict:
         c = self.cfg
         return {"mode": c.mode, "env": c.binance_env, "symbols": c.symbols, "initial_equity": c.initial_equity,
                 "risk_per_trade": c.risk_per_trade, "max_leverage": c.max_leverage,
                 "max_drawdown_pause": c.max_drawdown_pause, "books": list(self.trader.books),
+                "d1_symbols": list(self.trader.books["D1"].symbols) if "D1" in self.trader.books else None,
                 "live_book": self.executor.name if self.executor else None}
 
     def first_minute(self, symbol: str, start_ms: int) -> int:
@@ -152,14 +209,23 @@ class App:
 
     def _on_event(self, e: dict) -> None:
         kind, book = e["kind"], e.get("book", "")
+        if kind == "daily_close":
+            self.db.add_daily_close(e["symbol"], e["day_ms"], e["close"])
+            return
         if kind == "exit":
             self.db.add_trade(e)
         if kind == "live_exit":
             self.db.add_trade({**e, "book": f"{book}-live", "fees": e["fees_est"], "funding": 0.0,
                                "init_risk": abs(e["net"] / e["R"]) if e["R"] else 0.0, "eq_before": e["equity"]})
-        if kind in ("entry", "exit", "paused", "resumed", "skipped") or kind.startswith("live_"):
-            self.db.add_event(int(e.get("ts", 0) or 0), book, kind,
-                              {k: v for k, v in e.items() if k not in ("kind", "book")})
+        if kind in ("entry", "exit", "paused", "resumed", "skipped", "warning") or kind.startswith("live_"):
+            ts = e.get("ts") or e.get("exit_time") or (max(self.trader.last_minute.values()) + MINUTE_MS
+                                                       if self.trader.last_minute else 0)
+            self.db.add_event(int(ts), book, kind, {k: v for k, v in e.items() if k not in ("kind", "book")})
+        if kind.startswith("live_"):
+            # Real-account events come after the minute's paper processing (or from startup and commands), so the
+            # state is consistent here. Saving now commits the live row together with the executor and paper state,
+            # so a crash before the next save cannot make a restart record it, or the paper rows, a second time.
+            self.save()
         if kind == "day_end":
             self._daily(e)
             return
@@ -189,6 +255,8 @@ class App:
             return f"{tag} ▶️ entries resumed, equity ${e['equity']:,.0f}"
         if kind == "skipped":
             return f"{tag} skipped {SIDE[e['dir']]} {e['symbol']} (paused: {html.escape(e['reason'])})"
+        if kind == "warning":
+            return f"⚠️ {tag} {html.escape(e['msg'])}"
         if kind.startswith("live_"):
             return self._format_live(e)
         return None
@@ -242,6 +310,12 @@ class App:
             n_today = sum(1 for t in self.trader.books[name].trades if t["exit_time"] // TF_MS["1d"] * TF_MS["1d"]
                           == e["day_ms"])
             pos = ", ".join(f"{SIDE[p['dir']]} {p['symbol']} {p['R_open']:+.2f}R" for p in s["positions"]) or "none"
+            if "subs" in s:
+                by = {}
+                for x in s["subs"]:
+                    by[x["symbol"]] = by.get(x["symbol"], 0) + 1
+                pos = (f"{len(s['subs'])}/{s['slots']} sub-positions"
+                       + (" (" + ", ".join(f"{k.replace('USDT', '')} {v}" for k, v in by.items()) + ")" if by else ""))
             label = name + (" (paper model)" if self.executor and name == self.executor.name
                             else " (shadow)" if name not in self.notify_books else "")
             lines.append(f"<b>{html.escape(label)}</b>: ${s['equity']:,.0f} ({day_ret:+.2%} day, {total:+.1%} total), "
@@ -269,8 +343,9 @@ class App:
                            f"{sum(1 for p in ex.pos.values() if p.dir)}"
                            f"{' · PAUSED: ' + html.escape(ex.paused_reason) if ex.paused else ''}")
             for name, s in snap.items():
+                n_open = f"{len(s['subs'])}/{s['slots']} sub-positions" if "subs" in s else str(len(s["positions"]))
                 out.append(f"<b>{html.escape(name)}</b>: ${s['equity']:,.0f} ({s['equity'] / self.cfg.initial_equity - 1:+.1%}), "
-                           f"drawdown {s['drawdown']:.1%}, open {len(s['positions'])}, closed trades {s['n_trades']}"
+                           f"drawdown {s['drawdown']:.1%}, open {n_open}, closed trades {s['n_trades']}"
                            f"{' · PAUSED: ' + html.escape(s['paused_reason']) if s['paused'] else ''}")
             return "\n".join(out)
         if cmd == "/positions" and self.executor:
@@ -293,20 +368,18 @@ class App:
                 return "no closed trades yet"
             return "\n".join(f"{_t(t['exit_time'])} {SIDE[t['dir']]} {t['symbol']} {t['R']:+.2f}R "
                              f"(${t['net']:+,.0f}) {t['reason']}" for t in ts)
-        if cmd == "/pause":
+        if cmd in ("/pause", "/resume"):
             for b in self.trader.books.values():
-                if not b.paused:
+                if not getattr(b, "pausable", True):
+                    continue            # D1's registered rule has no pause (see btcq.live.d1)
+                if cmd == "/resume":
+                    b.resume()
+                elif not b.paused:
                     b.pause("paused by /pause")
             if self.executor:
-                self.executor.pause("paused by /pause")
-            self.save()
-            await self.flush()
-            return None
-        if cmd == "/resume":
-            for b in self.trader.books.values():
-                b.resume()
-            if self.executor:
-                self.executor.resume()
+                self.executor.resume() if cmd == "/resume" else self.executor.pause("paused by /pause")
+            if "D1" in self.trader.books and cmd == "/pause":
+                self.outbox.append("D1 (shadow) keeps running: its pre-registered forward test is never paused.")
             self.save()
             await self.flush()
             return None
@@ -329,6 +402,8 @@ class App:
             self.save()
             await self.flush()
             return None
+        if cmd == "/d1":
+            return self._d1_text()
         if cmd == "/compare":
             out = ["<b>Book comparison</b>"]
             for name, b in self.trader.books.items():
@@ -337,6 +412,32 @@ class App:
                 out.append(f"{html.escape(name)}: {len(rs)} trades, avg {avg:+.3f} R, equity ${b.equity():,.0f}")
             return "\n".join(out)
         return "unknown command, try /help"
+
+    def _d1_text(self) -> str:
+        b = self.trader.books.get("D1")
+        if b is None:
+            return "the D1 shadow book is off (D1_SHADOW=false)"
+        from btcq.live.d1 import ew_index
+        s = self.trader.snapshot()["D1"]
+        now = (max(self.trader.last_minute.values()) + MINUTE_MS) if self.trader.last_minute else None
+        by_day: dict[int, dict] = {}
+        for sym in b.symbols:
+            for d, c in b.closes[sym]:
+                by_day.setdefault(d, {})[sym] = c
+        idx = ew_index(b.start_close, b.started, by_day, b.last_close, now)
+        hold = idx[-1][1] - 1 if idx else math.nan
+        n_week = order_count(b.trades, s["subs"], (now or 0) - 7 * TF_MS["1d"])
+        by = {}
+        for x in s["subs"]:
+            by.setdefault(x["symbol"], []).append(str(x["lookback"]))
+        lines = [f"<b>D1 daily trend (shadow paper)</b>: ${s['equity']:,.0f} "
+                 f"({s['equity'] / self.cfg.initial_equity - 1:+.1%} since start), drawdown {s['drawdown']:.1%}",
+                 f"holding the {len(b.symbols)} coins instead (equal weights, rebalanced daily): {hold:+.1%}"
+                 if not math.isnan(hold) else "the holding comparison starts with the first price",
+                 f"open: {len(s['subs'])}/{s['slots']} sub-positions · closed sub-trades {s['n_trades']} · "
+                 f"orders in the last 7 days: {n_week} (one per coin per day)"]
+        lines += [f"  {html.escape(k)}: long on lookbacks {', '.join(v)}" for k, v in by.items()]
+        return "\n".join(lines)
 
     # ------------------------------------------------------------ loops
 
@@ -370,7 +471,9 @@ class App:
         snap = self.trader.snapshot()
         await self.notifier.send(
             f"🟢 <b>Bot started</b> ({self.cfg.mode}) · {len(self.cfg.symbols)} markets · caught up {n} minutes\n"
-            + "\n".join(f"{html.escape(k)}: ${v['equity']:,.0f}, open {len(v['positions'])}" for k, v in snap.items()))
+            + "\n".join(f"{html.escape(k)}: ${v['equity']:,.0f}, open "
+                        f"{str(len(v['subs'])) + '/' + str(v['slots']) if 'subs' in v else len(v['positions'])}"
+                        for k, v in snap.items()))
         tasks = [asyncio.create_task(self.notifier.poll_commands(self.command)),
                  asyncio.create_task(self.watchdog())]
         try:

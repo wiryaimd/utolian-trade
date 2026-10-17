@@ -16,9 +16,10 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE TABLE IF NOT EXISTS equity (book TEXT, day_ms INTEGER, equity REAL, PRIMARY KEY (book, day_ms));
 CREATE TABLE IF NOT EXISTS snapshots (
   book TEXT, ts INTEGER, equity REAL, drawdown REAL, n_open INTEGER, PRIMARY KEY (book, ts));
+CREATE TABLE IF NOT EXISTS daily_closes (symbol TEXT, day_ms INTEGER, close REAL, PRIMARY KEY (symbol, day_ms));
 """
 TRADE_COLS = ["book", "symbol", "dir", "entry_time", "exit_time", "entry_px", "exit_px", "qty", "init_risk",
-              "gross", "fees", "funding", "net", "R", "reason", "eq_before"]
+              "gross", "fees", "funding", "net", "R", "reason", "eq_before", "lookback"]
 
 
 class StateDB:
@@ -30,7 +31,30 @@ class StateDB:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(path))
         self.conn.executescript(SCHEMA)
+        if "lookback" not in self._trade_columns():     # databases from before the D1 book
+            self.conn.execute("ALTER TABLE trades ADD COLUMN lookback INTEGER")
+        # exit events used to be stored without a time (ts 0); their data carries exit_time
+        for rid, data in self.conn.execute("SELECT id, data FROM events WHERE ts=0 AND kind='exit'").fetchall():
+            t = json.loads(data).get("exit_time")
+            if t:
+                self.conn.execute("UPDATE events SET ts=? WHERE id=?", (int(t), rid))
         self.conn.commit()
+
+    def _trade_columns(self) -> list[str]:
+        return [r[1] for r in self.conn.execute("PRAGMA table_info(trades)").fetchall()]
+
+    def add_daily_close(self, symbol: str, day_ms: int, close: float) -> None:
+        """Buffered: committed with the next state save."""
+        self.conn.execute("INSERT OR REPLACE INTO daily_closes(symbol, day_ms, close) VALUES(?,?,?)",
+                          (symbol, day_ms, close))
+
+    def daily_closes(self) -> list[tuple]:
+        try:
+            return self.conn.execute("SELECT symbol, day_ms, close FROM daily_closes ORDER BY day_ms").fetchall()
+        except sqlite3.OperationalError as e:         # an older database opened read-only has no such table
+            if "no such table" in str(e):
+                return []
+            raise
 
     def set_meta(self, key: str, value) -> None:
         self.conn.execute("INSERT INTO kv(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
@@ -68,29 +92,36 @@ class StateDB:
         row = self.conn.execute("SELECT value FROM kv WHERE key='state'").fetchone()
         return json.loads(row[0]) if row else None
 
+    # Paper trades, events and daily equity are buffered and committed with the next state save, so a crash before
+    # that save rolls them back together with the state, and the replayed minutes write them exactly once.
+    # Real-account rows (live fills) also commit at once; the app saves the state right after each of them.
+
     def add_trade(self, t: dict) -> None:
         self.conn.execute(f"INSERT INTO trades({','.join(TRADE_COLS)}) VALUES({','.join('?' * len(TRADE_COLS))})",
                           [t.get(c) for c in TRADE_COLS])
-        self.conn.commit()
+        if str(t.get("book", "")).endswith("-live"):
+            self.conn.commit()
 
     def add_event(self, ts: int, book: str, kind: str, data: dict) -> None:
         self.conn.execute("INSERT INTO events(ts, book, kind, data) VALUES(?,?,?,?)",
                           (ts, book, kind, json.dumps(data, default=str)))
-        self.conn.commit()
+        if kind.startswith("live_"):
+            self.conn.commit()
 
     def set_equity(self, book: str, day_ms: int, equity: float) -> None:
+        """Buffered: committed with the next state save."""
         self.conn.execute("INSERT INTO equity(book, day_ms, equity) VALUES(?,?,?) "
                           "ON CONFLICT(book, day_ms) DO UPDATE SET equity=excluded.equity", (book, day_ms, equity))
-        self.conn.commit()
 
     def trades(self, book: str | None = None, limit: int = 1_000_000) -> list[dict]:
-        q, args = "SELECT " + ",".join(TRADE_COLS) + " FROM trades", []
+        cols = [c for c in TRADE_COLS if c in set(self._trade_columns())]
+        q, args = "SELECT " + ",".join(cols) + " FROM trades", []
         if book:
             q += " WHERE book=?"
             args.append(book)
         q += " ORDER BY exit_time DESC, id DESC LIMIT ?"
         args.append(limit)
-        return [dict(zip(TRADE_COLS, r)) for r in self.conn.execute(q, args).fetchall()]
+        return [dict(zip(cols, r)) for r in self.conn.execute(q, args).fetchall()]
 
     def equity_curve(self, book: str) -> list[tuple[int, float]]:
         return self.conn.execute("SELECT day_ms, equity FROM equity WHERE book=? ORDER BY day_ms",
