@@ -51,6 +51,7 @@ class Trader:
         # the live executor uses it to act immediately instead of a minute later.
         self.decision_hook: Callable[[str, str, int, dict, float], None] | None = None
         self.last_minute: dict[str, int] = {}
+        self.last_bar_end: dict[str, int] = {}     # per symbol: end of the last strategy bar evaluated
         self.day: int | None = None
 
     def _event(self, e: dict) -> None:
@@ -88,6 +89,7 @@ class Trader:
     def _on_bar_close(self, symbol: str, bar: list) -> None:
         frame = self.builders[symbol].frame()
         end = int(bar[0]) + TF_MS[self.tf]
+        self.last_bar_end[symbol] = end
         for name, runner in self.runners.items():
             d = runner.evaluate(frame)
             self.books[name].schedule(symbol, end, d)
@@ -120,7 +122,7 @@ class Trader:
     def state(self) -> dict:
         return {"books": {n: b.state() for n, b in self.books.items()},
                 "builders": {s: b.state() for s, b in self.builders.items()},
-                "last_minute": self.last_minute, "day": self.day}
+                "last_minute": self.last_minute, "last_bar_end": self.last_bar_end, "day": self.day}
 
     def restore(self, st: dict) -> None:
         for n, bst in st.get("books", {}).items():
@@ -133,4 +135,5 @@ class Trader:
             if s in self.builders:
                 self.builders[s].restore(bst)
         self.last_minute = {s: int(v) for s, v in st.get("last_minute", {}).items()}
+        self.last_bar_end = {s: int(v) for s, v in st.get("last_bar_end", {}).items()}
         self.day = st.get("day")

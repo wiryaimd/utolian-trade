@@ -20,10 +20,13 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit
 
+from btcq.live import health as H
 from btcq.live.config import D1_SYMBOLS, BotConfig
 from btcq.live.d1 import ew_index, order_count, worst_drawdown
 from btcq.live.db import StateDB
+from btcq.live.version import code_id
 
 PAGE = Path(__file__).with_name("dashboard.html")
 SIDE = {1: "LONG", -1: "SHORT"}
@@ -348,6 +351,46 @@ class DashboardData:
             finally:
                 db.close()
 
+    def _health_reads(self) -> dict | None:
+        with self.lock:
+            if not self.db_path.exists():
+                return None
+            db = StateDB(self.db_path, readonly=True)
+            try:
+                db.conn.execute("BEGIN")          # one consistent snapshot across the reads
+                try:
+                    return {"st": db.load_state(), "health": db.health(), "meta": db.meta("config", {}) or {},
+                            "source": db.meta("source", "live"), "daily_closes": db.daily_closes()}
+                finally:
+                    db.conn.rollback()
+            finally:
+                db.close()
+
+    def health_context(self) -> dict:
+        """What a full check needs: the bot's saved state and the Binance endpoints of its environment."""
+        from btcq.live.binance_api import ENVS
+        ctx = self._health_reads() or {}
+        env = ENVS.get((ctx.get("meta") or {}).get("env", "mainnet"), ENVS["mainnet"])
+        return {**ctx, "rest": env["rest"], "ws": env["ws"]}
+
+    def health_payload(self, runner: "H.FullCheckRunner | None" = None, notice: str | None = None) -> dict:
+        ctx = self._health_reads()
+        if ctx is None or not ctx["st"]:
+            return {"ready": False, "message": "The bot has not saved any state yet.", "notice": notice}
+        now = int(time.time() * 1000)
+        books = ctx["st"].get("books", {})
+        checks = H.live_checks(ctx["st"], ctx["health"], ctx["meta"], ctx["source"], now, self.db_path.parent,
+                               self.db_path, ctx["daily_closes"], code_id())
+        checks += runner.checks(books) if runner else H.placeholders(books)
+        order = [H.SERVER, H.MARKET, H.TELEGRAM, H.ACCOUNT] + list(books)
+        groups = [{"key": g, "title": H.GROUP_TITLES.get(g, g), "checks": [c for c in checks if c["group"] == g]}
+                  for g in order]
+        counts = {k: sum(1 for c in checks if c["status"] == k) for k in ("ok", "watch", "bad", "wait", "off")}
+        return _clean({"ready": True, "generated": now, "source": ctx["source"],
+                       "mode": ctx["meta"].get("mode", "paper"), "overall": H.worst(checks), "counts": counts,
+                       "groups": [g for g in groups if g["checks"]], "full": runner.status() if runner else None,
+                       "notice": notice, "dashboard_code": code_id()})
+
     def _build(self, db: StateDB) -> dict:
         st = db.load_state()
         if not st:
@@ -540,7 +583,8 @@ class LoginGuard:
             self.last_try.pop(ip, None)
 
 
-def make_handler(data: DashboardData, user: str, password: str, guard: LoginGuard | None = None):
+def make_handler(data: DashboardData, user: str, password: str, guard: LoginGuard | None = None,
+                 runner: "H.FullCheckRunner | None" = None):
     token = base64.b64encode(f"{user}:{password}".encode()).decode() if password else None
     guard = guard or LoginGuard()
 
@@ -586,31 +630,68 @@ def make_handler(data: DashboardData, user: str, password: str, guard: LoginGuar
             self.end_headers()
             self.wfile.write(body)
 
+        def _allowed(self) -> bool:
+            """Login lockouts and Basic auth; sends the refusal itself."""
+            ip = self.client_address[0]
+            wait = guard.retry_after(ip)
+            if wait and not (self.headers.get("Authorization") and guard.may_try(ip)):
+                self._send(429, b"too many wrong logins, try again later", "text/plain", {"Retry-After": str(wait)})
+                return False
+            if not self._auth_ok():
+                self._send(401, b"authentication required", "text/plain",
+                           {"WWW-Authenticate": 'Basic realm="restricted", charset="UTF-8"'})
+                return False
+            return True
+
+        def _json(self, build) -> None:
+            try:
+                body = json.dumps(build(), allow_nan=False, default=str).encode()
+            except sqlite3.Error:
+                return self._send(503, b'{"ready": false, "message": "bot database busy, retrying"}',
+                                  "application/json", {"Retry-After": "5"})
+            except Exception as e:  # noqa: BLE001 - never leak details to the client
+                print(f"dashboard: payload failed: {type(e).__name__}: {e}"[:240], flush=True)
+                return self._send(500, b'{"ready": false, "message": "dashboard error, see container log"}',
+                                  "application/json")
+            return self._send(200, body, "application/json")
+
+        def do_POST(self):
+            path = self.path.split("?")[0]
+            if path != "/api/health/check" or runner is None:
+                return self._send(404, b"not found", "text/plain")
+            if not self._allowed():
+                return None
+            # Only the dashboard page itself may press the button: a custom header (which a cross-site form cannot
+            # send without a CORS preflight that this server never approves) and, when the browser sends them,
+            # a same-origin Origin and Sec-Fetch-Site.
+            origin, site = self.headers.get("Origin"), self.headers.get("Sec-Fetch-Site")
+            if (self.headers.get("X-Requested-With") != "btcq-dashboard"
+                    or (origin and urlsplit(origin).netloc != self.headers.get("Host", ""))
+                    or site not in (None, "same-origin", "none")):
+                return self._send(403, b"forbidden", "text/plain")
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                return self._send(400, b"bad request", "text/plain")
+            if n < 0 or n > 1024:
+                return self._send(413 if n > 1024 else 400, b"bad request", "text/plain")
+            if n:
+                self.rfile.read(n)
+            notice = runner.run("button")
+            return self._json(lambda: data.health_payload(runner, notice))
+
         def do_GET(self):
             path = self.path.split("?")[0]
             if path == "/healthz":
                 return self._send(200, b"ok", "text/plain")
-            ip = self.client_address[0]
-            wait = guard.retry_after(ip)
-            if wait and not (self.headers.get("Authorization") and guard.may_try(ip)):
-                return self._send(429, b"too many wrong logins, try again later", "text/plain",
-                                  {"Retry-After": str(wait)})
-            if not self._auth_ok():
-                return self._send(401, b"authentication required", "text/plain",
-                                  {"WWW-Authenticate": 'Basic realm="restricted", charset="UTF-8"'})
+            if not self._allowed():
+                return None
             if path in ("/", "/index.html"):
                 return self._send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
             if path == "/api/data":
-                try:
-                    body = json.dumps(data.payload(), allow_nan=False, default=str).encode()
-                except sqlite3.Error:
-                    return self._send(503, b'{"ready": false, "message": "bot database busy, retrying"}',
-                                      "application/json", {"Retry-After": "5"})
-                except Exception as e:  # noqa: BLE001 - never leak details to the client
-                    print(f"dashboard: payload failed: {type(e).__name__}: {e}"[:240], flush=True)
-                    return self._send(500, b'{"ready": false, "message": "dashboard error, see container log"}',
-                                      "application/json")
-                return self._send(200, body, "application/json")
+                return self._json(data.payload)
+            if path == "/api/health":
+                return self._json(lambda: data.health_payload(runner))
             return self._send(404, b"not found", "text/plain")
 
     return Handler
@@ -718,4 +799,11 @@ def serve(db_path: Path | str, host: str = "127.0.0.1", port: int = 8080, user: 
     import os
     public = os.environ.get("DASHBOARD_BIND", host) not in LOOPBACK
     access = {"public": public, "password_len": len(password)}
-    return QuietServer((host, port), make_handler(DashboardData(db_path, access), user, password))
+    data = DashboardData(db_path, access)
+    from btcq.live.binance_api import ENVS
+    every_min = float(os.environ.get("DASHBOARD_FULL_CHECK_MIN", "15") or 0)
+    runner = H.FullCheckRunner(data.health_context, ENVS["mainnet"]["rest"], ENVS["mainnet"]["ws"],
+                               every_s=max(every_min, 0) * 60)
+    if every_min > 0:            # 0 = only when the button is pressed
+        runner.start()
+    return QuietServer((host, port), make_handler(data, user, password, runner=runner))

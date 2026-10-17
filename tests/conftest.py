@@ -1,8 +1,13 @@
+import os
+
 import numpy as np
 import pandas as pd
 import pytest
 
 from btcq.config import PARQUET_DIR
+
+# The dashboard's automatic full health check calls Binance and Telegram; tests never touch the network.
+os.environ["DASHBOARD_FULL_CHECK_MIN"] = "0"
 
 T0 = int(pd.Timestamp("2022-01-03", tz="UTC").value // 10**6)  # a Monday 00:00 UTC
 

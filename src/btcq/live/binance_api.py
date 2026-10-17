@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import hmac
 import logging
+import re
 import time
 from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
 from urllib.parse import urlencode
@@ -65,6 +66,8 @@ class BinanceFutures:
         self.client = client or httpx.AsyncClient(timeout=20)
         self.recv_window = recv_window
         self.offset_ms = 0
+        # Saved with the bot's state for the dashboard's System health tab.
+        self.health = {"last_ok": None, "last_error": None, "last_error_at": None}
 
     # ------------------------------------------------------------ transport
 
@@ -84,6 +87,16 @@ class BinanceFutures:
 
     async def _request(self, method: str, path: str, params: dict | None = None, signed: bool = False,
                        retries: int = 2):
+        try:
+            out = await self._request_once(method, path, params, signed, retries)
+        except BinanceError as e:
+            self.health["last_error"] = re.sub(r"\?[^\s'\"]*", "?…", f"{path}: {e}")[:200]
+            self.health["last_error_at"] = int(time.time() * 1000)
+            raise
+        self.health["last_ok"] = int(time.time() * 1000)
+        return out
+
+    async def _request_once(self, method: str, path: str, params: dict | None, signed: bool, retries: int):
         """GETs are retried on network errors / 5xx; order-placing calls are not retried here
         (callers check order status by client id instead, to stay idempotent)."""
         attempt = 0

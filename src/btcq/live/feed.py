@@ -11,6 +11,7 @@ import asyncio
 import heapq
 import json
 import logging
+import re
 import time
 
 import numpy as np
@@ -36,6 +37,11 @@ def funding_minutes(minute_ts: np.ndarray, f: pd.DataFrame) -> dict[int, float]:
             k = int(minute_ts[i])
             out[k] = out.get(k, 0.0) + float(r)
     return out
+
+
+def short_error(e: BaseException) -> str:
+    """One line for logs and the health record: URL query strings (which can hold signatures) are cut."""
+    return re.sub(r"\?[^\s'\"]*", "?…", f"{type(e).__name__}: {e}")[:200]
 
 
 def _to_minutes(df: pd.DataFrame) -> list[Minute]:
@@ -91,23 +97,35 @@ class BinanceFeed:
         self.base, self.ws_url = ENVS[env]["rest"], ENVS[env]["ws"]
         self.next_rate: dict[str, dict[int, float]] = {s: {} for s in symbols}
         self.silence_s = 60.0
+        # Saved with the bot's state for the dashboard's System health tab (times are wall-clock ms).
+        self.health: dict = {"ws_connected": False, "ws_since": None, "ws_last_msg": None, "ws_drops": [],
+                             "ws_last_error": None, "ws_last_error_at": None,
+                             "rest_last_ok": None, "rest_last_error": None, "rest_last_error_at": None}
+
+    async def _rest(self, fn, *args):
+        try:
+            out = await asyncio.to_thread(fn, *args)
+        except Exception as e:
+            self.health["rest_last_error"], self.health["rest_last_error_at"] = short_error(e), now_ms()
+            raise
+        self.health["rest_last_ok"] = now_ms()
+        return out
 
     async def history(self, symbol: str, cutoff_ms: int, tf: str, n: int) -> pd.DataFrame:
         start = cutoff_ms - n * TF_MS[tf]
-        df = await asyncio.to_thread(binance_rest.klines, tf, start, cutoff_ms, symbol, self.base)
+        df = await self._rest(binance_rest.klines, tf, start, cutoff_ms, symbol, self.base)
         return df[df["ts"] + TF_MS[tf] <= cutoff_ms].tail(n).reset_index(drop=True)
 
     async def minutes(self, symbol: str, start_ms: int, end_ms: int) -> list[Minute]:
         if end_ms <= start_ms:
             return []
-        df = await asyncio.to_thread(binance_rest.klines, "1m", start_ms, end_ms, symbol, self.base)
+        df = await self._rest(binance_rest.klines, "1m", start_ms, end_ms, symbol, self.base)
         return _to_minutes(df[df["ts"] < end_ms])
 
     async def funding_map(self, symbol: str, start_ms: int, end_ms: int) -> dict[int, float]:
         if end_ms <= start_ms:
             return {}
-        f = await asyncio.to_thread(binance_rest.funding_history, start_ms - MINUTE_MS, end_ms, symbol,
-                                    self.base)
+        f = await self._rest(binance_rest.funding_history, start_ms - MINUTE_MS, end_ms, symbol, self.base)
         minute_ts = np.arange(start_ms, end_ms, MINUTE_MS, dtype=np.int64)
         return funding_minutes(minute_ts, f)
 
@@ -123,10 +141,12 @@ class BinanceFeed:
         streams = "/".join(f"{s.lower()}@kline_1m/{s.lower()}@markPrice@1s" for s in self.symbols)
         backoff = 1
         first = True
+        h = self.health
         while True:
             try:
                 async with websockets.connect(self.ws_url + streams, ping_interval=20, ping_timeout=20,
                                               max_size=2**22) as ws:
+                    h["ws_connected"], h["ws_since"] = True, now_ms()
                     if not first:
                         yield "reconnected", None, None
                     first = False
@@ -138,6 +158,7 @@ class BinanceFeed:
                             raw = await asyncio.wait_for(ws.recv(), timeout=self.silence_s)
                         except asyncio.TimeoutError:
                             raise ConnectionError(f"no messages for {self.silence_s:g}s") from None
+                        h["ws_last_msg"] = now_ms()
                         backoff = 1
                         msg = json.loads(raw).get("data", {})
                         if msg.get("e") == "kline":
@@ -150,6 +171,10 @@ class BinanceFeed:
                             nxt = int(msg["T"]) // MINUTE_MS * MINUTE_MS
                             self.next_rate[msg["s"]][nxt] = float(msg["r"])
             except Exception as e:  # noqa: BLE001
+                if h["ws_connected"]:           # count lost connections, not each failed reconnect attempt
+                    h["ws_drops"] = (h["ws_drops"] + [now_ms()])[-50:]
+                h["ws_connected"] = False
+                h["ws_last_error"], h["ws_last_error_at"] = short_error(e), now_ms()
                 log.warning("websocket error: %s; reconnecting in %ss", e, backoff)
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 60)

@@ -101,8 +101,9 @@ async def _check(cfg: BotConfig) -> int:
             print(f"TG    bot @{me['result']['username']} OK; sending a test message")
             await tg.send("✅ btcq bot connectivity check passed for Telegram.")
         except Exception as e:  # noqa: BLE001
+            from btcq.live.telegram import redact
             ok = False
-            print(f"TG    FAILED {e}")
+            print(f"TG    FAILED {redact(e)}")
     else:
         print("TG    not configured (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID)")
     return 0 if ok else 1

@@ -14,6 +14,7 @@ from btcq.live.d1 import order_count, restore_problem
 from btcq.live.db import StateDB
 from btcq.live.feed import now_ms
 from btcq.live.trader import Trader
+from btcq.live.version import code_id
 
 log = logging.getLogger("btcq.app")
 SIDE = {1: "LONG", -1: "SHORT"}
@@ -51,6 +52,9 @@ class App:
         self.stale_alerted = False
         self.pending_decisions: list[tuple] = []
         self.snap_slot: int | None = None
+        self.started_ms = now_ms()
+        self.processed_at: int | None = None          # wall-clock time the last minute was processed
+        self.last_catch_up: dict | None = None
         if executor:
             executor.on_event = self._on_event
             self.trader.decision_hook = self._on_decision
@@ -155,16 +159,26 @@ class App:
             return last + MINUTE_MS
         return start_ms // TF_MS[self.trader.tf] * TF_MS[self.trader.tf]
 
+    def health_record(self) -> dict:
+        """What the dashboard's System health tab needs from the running bot (no secrets)."""
+        ex = self.executor
+        return {"written": now_ms(), "started": self.started_ms, "code": code_id(), "mode": self.cfg.mode,
+                "env": self.cfg.binance_env, "processed_at": self.processed_at, "catch_up": self.last_catch_up,
+                "feed": getattr(self.feed, "health", None), "telegram": getattr(self.notifier, "health", None),
+                "account_api": getattr(getattr(ex, "api", None), "health", None) if ex else None}
+
     def save(self) -> None:
         st = self.trader.state()
         if self.executor:
             st["live"] = self.executor.state()
+        self.db.set_health(self.health_record())
         self.db.save_state(st)
 
     # ------------------------------------------------------------ processing
 
     async def process(self, symbol: str, m: Minute, funding_rate: float) -> None:
         self.trader.process_minute(symbol, m, funding_rate)
+        self.processed_at = now_ms()
         if self.executor:
             self.executor.on_minute(symbol, m.high, m.low)
             while self.pending_decisions:
@@ -203,6 +217,8 @@ class App:
         batches.sort(key=lambda x: (x[0], x[1]))
         for _, s, m, r in batches:
             await self.process(s, m, r)
+        if batches:
+            self.last_catch_up = {"at": now_ms(), "minutes": len(batches)}
         return len(batches)
 
     # ------------------------------------------------------------ events -> db / messages

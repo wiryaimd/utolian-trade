@@ -88,6 +88,15 @@ class StateDB:
                           "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (json.dumps(state),))
         self.conn.commit()
 
+    def set_health(self, health: dict) -> None:
+        """Buffered: committed with the next state save."""
+        self.conn.execute("INSERT INTO kv(key, value) VALUES('health', ?) "
+                          "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (json.dumps(health, default=str),))
+
+    def health(self) -> dict | None:
+        row = self.conn.execute("SELECT value FROM kv WHERE key='health'").fetchone()
+        return json.loads(row[0]) if row else None
+
     def load_state(self) -> dict | None:
         row = self.conn.execute("SELECT value FROM kv WHERE key='state'").fetchone()
         return json.loads(row[0]) if row else None

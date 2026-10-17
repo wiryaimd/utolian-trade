@@ -55,6 +55,19 @@ select{font:inherit;padding:4px 8px;border-radius:6px;border:1px solid var(--bor
 .row{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .empty{padding:18px;color:var(--text-muted);text-align:center}
 details{margin-top:28px} summary{cursor:pointer;color:var(--text-secondary)}
+.tabs{display:flex;gap:4px;margin-top:14px;border-bottom:1px solid var(--grid)}
+.tab{padding:8px 14px;color:var(--text-secondary);text-decoration:none;border-bottom:2px solid transparent;margin-bottom:-1px;font-weight:560}
+.tab.active{color:var(--text-primary);border-bottom-color:var(--series-1)}
+a.badge{text-decoration:none}
+.badge.ok{color:var(--good-text);border-color:var(--good)} .badge.watch{color:var(--warn-text);border-color:var(--warning)}
+.badge.bad{color:var(--critical);border-color:var(--critical)}
+.btn{font:inherit;font-weight:600;padding:8px 16px;border-radius:8px;border:1px solid var(--series-1);background:var(--series-1);
+color:#fff;cursor:pointer} .btn:disabled{opacity:.6;cursor:default}
+.hsum{font-size:20px;font-weight:650} .hsum.ok{color:var(--good-text)} .hsum.watch{color:var(--warn-text)} .hsum.bad{color:var(--critical)}
+.notice{background:var(--callout);border-radius:8px;padding:8px 12px;margin-top:10px;font-size:13px}
+.kind{font-size:11px;color:var(--text-muted);white-space:nowrap}
+.st.off{color:var(--text-muted)}
+table.ht th,table.ht td{text-align:left}
 dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;font-size:13px} dt{font-weight:600}
 dd{margin:0;color:var(--text-secondary)}
 </style>
@@ -66,8 +79,10 @@ dd{margin:0;color:var(--text-secondary)}
       <h1>Trading monitor</h1>
       <div class="sub" id="asof">loading…</div>
     </div>
-    <div class="badges" id="badges"></div>
+    <div class="badges"><span class="badges" id="badges"></span><a class="badge" id="sysChip" href="#health" hidden></a></div>
   </header>
+  <nav class="tabs"><a class="tab active" id="tabTrading" href="#">Trading</a><a class="tab" id="tabHealth" href="#health">System health</a></nav>
+  <div id="viewTrading">
   <div id="banner"></div>
   <div class="tiles" id="tiles"></div>
 
@@ -104,6 +119,24 @@ dd{margin:0;color:var(--text-secondary)}
 
   <h2>Activity log</h2>
   <div class="card tw"><table id="events"></table></div>
+  </div>
+
+  <div id="viewHealth" hidden>
+    <div class="row" style="margin-top:18px">
+      <div><div class="hsum" id="hSum">loading…</div><div class="sub" id="hAsof"></div></div>
+      <button class="btn" id="runFull" type="button">Run full check now</button>
+    </div>
+    <div id="hNotice"></div>
+    <div id="hGroups"></div>
+    <details>
+      <summary>How these checks work</summary>
+      <div class="card small" style="margin-top:8px"><dl>
+        <dt>Live checks</dt><dd>Recomputed every 30 s from what the bot saves every minute: its heartbeat, its state, and a health record of its connections (Binance websocket and REST, Telegram, and in live mode the Binance account API). They need no network.</dd>
+        <dt>Full checks</dt><dd>Run when you press the button, and automatically every 15 minutes. The server calls Binance's and Telegram's public addresses and compares the bot's latest prices, F1's current 4h bar and D1's daily closes and positions with Binance's own data. No API key is used and nothing is changed.</dd>
+        <dt>Statuses</dt><dd>✓ OK: fine. ▲ Watch: unusual, look again soon. ✗ Problem: needs attention. … Waiting: not enough data yet or not checked yet. – Off: does not apply (for example the account API in paper mode).</dd>
+      </dl></div>
+    </details>
+  </div>
 
   <details>
     <summary>What do these terms mean?</summary>
@@ -123,8 +156,10 @@ dd{margin:0;color:var(--text-secondary)}
 const LABEL = {"F1": "F1 paper", "F1-long": "F1 long-only (shadow)", "F1-live": "F1 live account", "D1": "D1 daily trend (shadow)"};
 const SERIES_COLOR = {"F1": "var(--series-1)", "F1-long": "var(--series-2)", "F1-live": "var(--series-3)", "D1": "var(--series-4)"};
 const SIDE = {"1": "LONG", "-1": "SHORT"};
-const STATUS = {ok: "✓ OK", watch: "▲ Watch", bad: "✗ Problem", wait: "… Too early"};
-let DATA = null;
+const STATUS = {ok: "✓ OK", watch: "▲ Watch", bad: "✗ Problem", wait: "… Too early", off: "– Off"};
+const HSTATUS = {ok: "✓ OK", watch: "▲ Watch", bad: "✗ Problem", wait: "… Waiting", off: "– Off"};
+let DATA = null, HEALTH = null;
+const healthView = () => location.hash === "#health";
 
 const $ = id => document.getElementById(id);
 function tok(v){ if(typeof v==="string" && v.startsWith("var(")){ return getComputedStyle(document.documentElement)
@@ -314,6 +349,58 @@ function renderD1(d){
   $("d1rule").textContent = p.rule;
 }
 
+function renderHealth(){
+  const h = HEALTH, chip = $("sysChip");
+  if(!h || !h.ready){ chip.hidden = true; $("hSum").textContent = h ? h.message : "loading…"; return; }
+  const c = h.counts;
+  chip.hidden = false; chip.className = "badge " + h.overall;
+  chip.textContent = "System " + (h.overall === "bad" ? "✗ " + c.bad + " problem" + (c.bad>1?"s":"") :
+    h.overall === "watch" ? "▲ " + c.watch + " to watch" : "✓ OK");
+  $("hSum").className = "hsum " + h.overall;
+  $("hSum").textContent = h.overall === "bad" ? "✗ " + c.bad + " problem" + (c.bad>1?"s":"") + " need attention" :
+    h.overall === "watch" ? "▲ " + c.watch + " check" + (c.watch>1?"s":"") + " to watch" : "✓ All systems OK";
+  const f = h.full || {};
+  $("hAsof").textContent = "Live checks refresh every 30 s · " + (f.ran_at ? "last full check " + when(f.ran_at) +
+    " (" + (f.trigger === "auto" ? "automatic" : "button") + ", " + (f.took_ms/1000).toFixed(1) + " s)" : "no full check yet") +
+    (f.every_min ? " · automatic every " + f.every_min + " min" : "") + " · " + c.ok + " OK, " + c.watch + " watch, " + c.bad + " problems";
+  $("hNotice").replaceChildren(...(h.notice ? [el("div", h.notice, "notice")] : []));
+  const box = $("hGroups"); box.replaceChildren();
+  h.groups.forEach((g, i) => {
+    const title = LABEL[g.key] ? LABEL[g.key] + ": strategy checks" : g.title;
+    box.appendChild(el("h2", title));
+    const card = el("div", null, "card tw"), t = el("table", null, "ht"); t.id = "hg" + i; card.appendChild(t); box.appendChild(card);
+    table(t.id, ["Check", "Status", "Now", "What it means", "Type"], g.checks.map(x => [x.name,
+      {text: HSTATUS[x.status] || x.status, cls: "st " + x.status}, {text: x.value, cls: "wrapn"}, {text: x.note, cls: "wrap"},
+      {text: x.kind === "full" ? "full check" : "live", cls: "kind"}]), 1);
+  });
+}
+
+async function loadHealth(){
+  try{
+    const r = await fetch("/api/health", {cache:"no-store"});
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    HEALTH = await r.json(); renderHealth();
+  }catch(err){ if(healthView()) $("hSum").textContent = "Could not load health (" + err.message + "). Retrying…"; }
+}
+
+async function runFull(){
+  const b = $("runFull"); b.disabled = true; b.textContent = "Checking… (up to 20 s)";
+  try{
+    const r = await fetch("/api/health/check", {method: "POST", cache: "no-store",
+      headers: {"X-Requested-With": "btcq-dashboard"}});
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    HEALTH = await r.json(); renderHealth();
+  }catch(err){ $("hNotice").replaceChildren(el("div", "The full check failed to run (" + err.message + ").", "notice")); }
+  finally{ b.disabled = false; b.textContent = "Run full check now"; }
+}
+
+function showView(){
+  const hv = healthView();
+  $("viewTrading").hidden = hv; $("viewHealth").hidden = !hv;
+  $("tabTrading").classList.toggle("active", !hv); $("tabHealth").classList.toggle("active", hv);
+  if(!hv && DATA) render();     // charts drawn while hidden have no size
+}
+
 async function load(){
   try{
     const r = await fetch("/api/data", {cache:"no-store"});
@@ -322,8 +409,10 @@ async function load(){
   }catch(err){ $("asof").textContent = "Could not load data (" + err.message + "). Retrying…"; }
 }
 $("bookSel").addEventListener("change", render);
-window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => DATA && render());
-load(); setInterval(load, 30000);
+$("runFull").addEventListener("click", runFull);
+window.addEventListener("hashchange", showView);
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => DATA && !healthView() && render());
+showView(); load(); loadHealth(); setInterval(() => { load(); loadHealth(); }, 30000);
 </script>
 </body>
 </html>
