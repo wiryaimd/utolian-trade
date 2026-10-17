@@ -499,7 +499,8 @@ def _klines(http_get, rest: str, symbol: str, interval: str, **params) -> list:
 
 def full_checks(st: dict | None, meta: dict, source: str, daily_closes: list[tuple], rest: str, ws: str,
                 http_get: Callable = http_get_default, ws_probe: Callable = ws_probe_default,
-                clock: Callable[[], float] = time.time, deadline_s: float = FULL_DEADLINE_S) -> list[dict]:
+                clock: Callable[[], float] = time.time, deadline_s: float = FULL_DEADLINE_S,
+                sleep: Callable[[float], None] = time.sleep) -> list[dict]:
     st = st or {}
     books = st.get("books", {})
     lm = {s: int(v) for s, v in st.get("last_minute", {}).items()}
@@ -541,16 +542,24 @@ def full_checks(st: dict | None, meta: dict, source: str, daily_closes: list[tup
     def prices():
         if replay:
             return [_check(MARKET, "Bot prices match Binance", "off", "replay", "Archive replay: not compared.", "full")]
-        mism, same = [], 0
-        for s in symbols:
-            t, mine = lm.get(s), paper.get("last_close", {}).get(s)
-            if t is None or mine is None:
-                continue
+        def compare(s: str) -> str | None:
+            t, mine = lm[s], float(paper["last_close"][s])
             k = _klines(http_get, rest, s, "1m", startTime=t, limit=1)
             if not k or int(k[0][0]) != t:
-                mism.append(f"{s}: Binance has no bar at {utc(t)}")
-            elif abs(float(k[0][4]) - float(mine)) > 1e-9 * abs(float(mine)):
-                mism.append(f"{s}: bot {float(mine):g} vs Binance {float(k[0][4]):g}")
+                return f"{s}: Binance has no bar at {utc(t)}"
+            if abs(float(k[0][4]) - mine) > 1e-9 * abs(mine):
+                return f"{s}: bot {mine:g} vs Binance {float(k[0][4]):g}"
+            return None
+
+        mism, same = [], 0
+        todo = [s for s in symbols if lm.get(s) is not None and paper.get("last_close", {}).get(s) is not None]
+        first = {s: compare(s) for s in todo}
+        if any(first.values()):
+            sleep(3.0)          # Binance's REST history can trail its live stream for a minute that just closed
+        for s in todo:
+            why = first[s] and compare(s)
+            if why:
+                mism.append(why)
             else:
                 same += 1
         return [_check(MARKET, "Bot prices match Binance", "bad" if mism else "ok",

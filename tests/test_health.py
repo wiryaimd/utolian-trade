@@ -247,6 +247,22 @@ def test_full_checks_catch_wrong_prices_positions_and_a_blocked_api():
     assert f"BTCUSDT {longs[0]}d: rule long, D1 flat" in c[("D1", "Positions follow the rule")]["note"]
 
 
+def test_a_price_that_binance_has_not_finalised_yet_is_asked_again():
+    hist = daily_history()
+    st, _, closes = healthy(hist)
+    fake = FakeBinance(hist, close_1m={"BTCUSDT": "61000.4", "ETHUSDT": "2400.25"})
+    waits = []
+
+    def sleep(sec):                                   # by the time the check asks again, Binance has the final close
+        waits.append(sec)
+        fake.close_1m["BTCUSDT"] = "61000.5"
+    c = full(st, closes, fake, sleep=sleep)
+    assert c[("market", "Bot prices match Binance")]["status"] == "ok" and waits == [3.0]
+    c = full(st, closes, FakeBinance(hist, close_1m={"BTCUSDT": "61000.4", "ETHUSDT": "2400.25"}),
+             sleep=lambda sec: None)
+    assert c[("market", "Bot prices match Binance")]["status"] == "bad"
+
+
 def test_full_checks_share_4h_bars_and_fill_missing_days_like_the_bot():
     hist = daily_history()
     gap = len(hist["BTCUSDT"]) - 40
