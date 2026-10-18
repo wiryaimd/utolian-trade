@@ -1512,3 +1512,68 @@ PBO (CSCV over the 6 configs, 16 slices) is reported only (Amendment 2).
     missing rows.
 - **The universe's holdout membership is known:** which coins were among the 15 most liquid non-majors in each month
   of 2024–26 was computed in Round 4 from daily quote volume (no prices or returns were looked at).
+
+### Round 7 outcome (2026-10-19, after the dev sweep)
+
+**Verdict: RT FAILS dev.** It fails 5 of the 7 registered dev gates. As registered, the holdout was not opened:
+`research/holdout_log.jsonl` has no Round 7 record, so the non-majors' 2024–26 data stays clean. RT is closed on this
+universe. Results: `reports/results/RT.json`, commit `d5d22ce`; run log `research/round7/runs.jsonl`.
+
+**Dev, primary L = 14, H = 6, 2020-06-01 → 2023-12-31, $10,000 start:**
+- 428 trades (holding episodes, 7.2 days on average), orders on 90% of days, invested on 87%.
+- Total return −57.4% (CAGR −21.2%), Sharpe 0.22, volatility 95% a year, weekly t 0.42.
+- Worst end-of-day drawdown 97.0%: from $66,895 on 2021-04-16 to $2,004 on 2023-10-09. Year-end equity: $11,040,
+  $20,404, $4,341, $4,259.
+- Costs: fees $2,095 and funding $11,862. The funding was almost all paid in 2020–21 ($1,792 and $10,657; in 2021
+  about 39% of the account, summed daily), when long positions in trending alts paid high rates.
+
+| Year | RT | Equal-weight hold of the month's members |
+|---|---|---|
+| 2020 (from June) | +10.4% | +59.1% |
+| 2021 | +84.8% | +253.2% |
+| 2022 | −78.7% | −88.0% |
+| 2023 | −1.9% | +74.6% |
+| 2020-06 → 2023 | −57.4% | +17.9% |
+
+| Dev gate | Result | |
+|---|---|---|
+| ≥ 100 trades | 428 | pass |
+| Mean daily > 0 at 2× fees and slippage | +0.040%/day (total −66.4%) | pass |
+| Null p < 0.05 | 0.538 (actual 0.076%/day at zero cost, null mean 0.082%/day) | **fail** |
+| DSR ≥ 0.95 at the family N_eff | 0.664 at N_eff 1.31 (no deflation: PSR 0.664) | **fail** |
+| Best year ≤ 65% | 2021 = 181% of the summed daily returns | **fail** |
+| Plateau: 3 neighbours positive | (7, 6) +14.6%, (28, 6) +81.8%, (14, 3) −33.3% | **fail** |
+| Breadth: ≥ 60% of coins with 5+ trades positive, 10+ coins | 14 of 33 (42%) | **fail** |
+
+**Reported, not gated:**
+- PBO 0.54.
+- All six configs' totals: (7, 3) +34.8%, (7, 6) +14.6%, (14, 3) −33.3%, (14, 6) −57.4%, (28, 3) +155.0%,
+  (28, 6) +81.8%. Their Sharpes run from 0.22 to 0.75. These are information only: the primary was fixed in
+  advance, and testing a 28-day version now would be a new, post-hoc trial.
+- DSR at the raw N = 6: 0.19. With XS's 6 configs (N_eff 3.09): 0.33. Strict tier (dev only, N = 18.85): 0.07.
+- Against the equal-weight hold: beta 0.73, alpha −14.8% a year, alpha PSR 0.34.
+- F1: weekly correlation 0.16, HAC alpha t −0.10.
+- Without the best coin (DOGE, +$12.8k) the total is −70.4%. With no daily resize it is −53.6%. 34 meme trades
+  made +$8.4k and the rest −$14.2k.
+- No forced (delisting) exit happened in the primary. LUNA was last held 2022-05-02 → 05-03, before its collapse.
+
+**Independent check (before this outcome was written).** A separate agent wrote its own pure-Python simulator from
+the registered rules and re-ran the committed dev panel.
+- All 6 configs matched to rounding (daily returns within 7e-16), with identical episode counts.
+- All 428 primary episodes matched, and so did the 2× run.
+- Every gate it recomputed matched `RT.json`.
+- The panel matched the raw dev 1m and funding data for LINK, DOGE and LUNA on every day.
+- Its own estimate of funding was within 1.1% of the simulator's.
+- Its own stratified null gave p = 0.54.
+- One wording detail: the null's EWMA uses pandas' bias-adjusted weights, so the newest day weighs about 0.071 when
+  only 30 returns exist (0.06 in the limit). With exact recursive weights the groups agree on 99.95% of candidate
+  cells and p is 0.545. The verdict does not depend on it.
+
+**What it means, in plain words:**
+- Holding the 3 strongest of the liquid alts, re-chosen every day, did no better than picking coins of similar
+  volatility at random (p 0.54).
+- It made money only in the 2021 bull market, and much less than simply holding all 15. Funding on the long
+  positions took a large share of that.
+- It then lost almost everything in 2022–23. It traded every day, as wanted, but daily activity did not bring an
+  edge here.
+- This closes daily cross-sectional momentum on this universe, after XS failed on the majors.
