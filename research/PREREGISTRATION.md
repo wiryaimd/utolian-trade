@@ -1236,3 +1236,279 @@ from its first day to the check. This is the live-style account, in which each s
 - **Any one missed:** no practical pass. The check is not repeated or moved, and D1 continues on paper.
 - **Either way,** the registered forward test is unchanged and reported separately: first look at 12 months, verdict at
   24 (alpha PSR ≥ 0.95, total return > 0, end-of-day drawdown ≤ 30%).
+
+## Practical rulebook, Amendment 2: PBO is reported when the primary config is fixed in advance (owner decision, 2026-10-19, before any Round 7 data or backtest)
+
+**Disclosure:** decided before Round 7 is run and before any Round 7 data is loaded. It changes no recorded verdict.
+
+**Why:** the rulebook's dev rule "where the round has a grid: PBO ≤ 0.5 and its neighbouring configs positive"
+was written for searches that pick the best config. When a round fixes its primary config before the test and
+never selects among the grid, PBO does not measure a selection the round makes. With only a few configs it is
+also close to a coin flip (with 6 configs, a few CSCV splits decide it).
+
+**New rule, from Round 7 on:** when the registration fixes the primary config in advance and the grid is used only
+to judge robustness, PBO is reported, not gated. The plateau rule stays a gate: the registered neighbouring configs
+must all be positive. A round that selects its config from the grid keeps the PBO ≤ 0.5 gate.
+
+## Round 7 (RT) — registered 2026-10-19, before any Round 7 data is downloaded and before any Round 7 backtest
+
+**Why.** The owner wants a strategy that trades every day. F1 trades a few times a month, and D1 is only in a
+forward test. A daily rotation among the most liquid non-major perps is a different family from everything tried
+so far: it is cross-sectional (which coins), not a breakout on each coin alone. XS, a cross-sectional idea on the
+5 majors, failed Round 5's dev gates; U1 (F1's breakout on these alts) failed Round 4.
+
+**Owner decisions (2026-10-19):**
+- The universe is the non-majors only: BTC, ETH, SOL, XRP and BNB are excluded. Their 2024–26 data has already
+  been seen in earlier rounds; none of the non-majors' 2024–26 data has (Round 4's Stage B was never unlocked).
+- Judged under the practical rulebook with Amendments 1 and 2 (PBO reported only).
+- Long only, at most 1× gross, rebalanced at 00:00 UTC, with realistic turnover costs.
+
+**Code:** commit `d638eaf`. New: `src/btcq/backtest/rotation_sim.py`, `src/btcq/strategies/r7_rotation.py`,
+`src/btcq/research/round7.py`, `src/btcq/research/round7_calib.py`, `src/btcq/research/guards.py` and their tests;
+changed: `store.py` (a blind quality count and structured unlock records), `stats.py` (`power_table_practical`),
+`run.py` (CLI), `report.py`, `strategies/__init__.py`, `.gitattributes`. The 17 files in `round7.CODE_FILES` are
+hashed at the sweep start and checked before the holdout. 350 tests pass at that commit.
+
+### Universe `um-rot15-pit-v1`
+- The gated (non-major) rows of `research/round4/universe.csv` (Round 4's `um-top20-pit-v1`, point in time: each
+  month's top 20 USDT-M perps by median 90-day quote volume before the month, at least 90 days old). SHA256
+  `6d79828bb183fce140900b0e1cc52e5d4d1687d7720484abfad0945074dcf36f` (line endings normalised), checked on every load.
+- 16 members a month in 2020-06 → 2021-05, 15 a month from 2021-06 → 2026-09. 71 coins appear in dev months, 65 in
+  holdout months, 109 in all; 38 appear only in holdout months.
+- Membership and the slippage tier of a fill come from the month of the fill day: a decision at the close of the
+  last day of a month uses the next month's list.
+
+### Data
+- Binance's monthly/daily archive of 1m perp klines and funding, as in Round 4 (`store.build_perp_only`). The 71 dev
+  coins are already in the store from Round 4 (full span, never loaded after 2023 by any run). The 38 holdout-only
+  coins are built by `r7-download` before the dev sweep.
+- **Blind build:** the build's quality report counts extreme bars only on rows before 2024-01-01; the data report
+  reads only the timestamps and volume of the 1m files and the timestamps of the funding files. No price or return
+  from 2024 on is looked at or summarised before the unlock.
+- **Cleaning (Round 4's):** trailing zero-volume minutes after the last traded minute are dropped; funding stretches
+  longer than 9h without a settlement are filled at the synthetic 0.01%/8h (00/08/16 UTC settlements inside them),
+  and the filled hours are reported per coin.
+- **Data report** (`research/round7/data_report.csv`) and **manifest** (`research/round7/manifest.json`: the universe
+  SHA256 and the SHA256 of every coin's 1m and funding parquet) are committed before the sweep start record; the
+  manifest is re-checked at the sweep and before the holdout.
+- **Red flags** (per window in which the coin is a member): the build failed or has no 1m data; no traded minute at
+  or after the start of its first member month; the worst member month's 1m coverage is below 90% (counted up to
+  the last traded minute); funding gaps above 9h cover more than 5% of the member hours; a coin still listed as
+  TRADING whose rows stop more than 1h before the window's end (an incomplete archive). Data that stops because
+  trading stopped is a delisting under the rules, reported but not a flag. The flags are recomputed from the report's
+  columns on every check, and the manifest pins the report's SHA256. Any red flag stops the round until a dated
+  amendment; then `r7-download --resume` rebuilds the failed builds.
+
+### Rule RT
+At each decision, the close of UTC day D (the last 1m close of the day), for every coin:
+- **Score:** ln(C_D / C_{D−L}), C = the day's last 1m close.
+- **Candidate:** a member of the fill day's (D+1) month; at least one traded minute on day D; the decision is not
+  inside a no-trade gap or the 7-day cooldown after one (Round 4's delisting rule, below); a 1m row at or after
+  00:01 on day D+1; both closes; and no gap inside the lookback: the last finished gap must have ended before the
+  minute of C_{D−L} (strictly more than L days before the decision), so C_{D−L} is never a stale pre-gap price.
+- **Eligible:** a candidate with score > 0 (absolute momentum).
+- **Ranking:** candidates by score, highest first; ties by symbol.
+- **Holding:** a held coin is kept while it is eligible and ranks ≤ H. The free slots go to the best-ranked eligible
+  coins not held. K = 3 slots. Fewer than 3 eligible coins means the rest is cash (never re-weighted to 1/n).
+- **Sizing:** every held coin is resized at each fill to 1/3 of the equity at the decision close: target quantity =
+  E_D / 3 / X, where X is the fill price. Cash earns 0%.
+- **Execution:** fills at the open of the first 1m row at or after 00:01 UTC on day D+1 (1-minute latency, as F1).
+  A held coin with no fill row that day and not in a gap keeps its quantity until the next fill.
+- **Configs:** L ∈ {7, 14, 28} days × H ∈ {3, 6}: 6 trials. **The primary is fixed: L = 14, H = 6.** Its plateau
+  neighbours are (L = 7, H = 6), (L = 28, H = 6) and (L = 14, H = 3). Nothing is selected from the grid.
+
+### Account and costs
+- One account of $10,000, long only, at most 3 positions, gross ≤ 1× at each fill.
+- Per fill day, in minute order (as `engine.run`): funding on the old position through the fill minute; a forced
+  exit before the fill; the fills; funding on the new position through the day's last minute; a forced exit at or
+  after the fill minute; the mark at the day's last close. Both windows start flat and close every position at the
+  last close of the window.
+- **Fees:** taker 5 bp on the traded notional of every buy, sell and resize.
+- **Slippage:** Round 4's tiers by the fill month's rank: 2 bp (rank 1–10), 3 bp (11–20), 5 bp for a coin that is
+  not a member that month (an exit after it left the list), on |Δquantity|.
+- **Funding:** the real Binance rate at each settlement (any interval), on the quantity held at that minute, at that
+  minute's open, as `engine.Market` maps it; synthetic 0.01%/8h before a coin's first real rate.
+- **Delisting rule (Round 4's):** more than 24h without a traded minute is a settlement or delisting: a held coin is
+  closed at the close of its last traded minute with an extra 1% penalty, and no new entry is allowed until 7 days
+  after trading resumes.
+- **2× stress:** fees and slippage doubled (funding and the penalty unchanged).
+- **Single-coin check:** with daily resizing off, the simulator reproduces `engine.run` exactly for one coin (trades,
+  quantities, fees, funding, forced exits and daily marks, to 1e-9); this is a unit test.
+
+### Windows
+- **Dev:** 2020-06-01 → 2023-12-31 (1,309 days); scores and volatility use the 70 days before the start. The first
+  fill is 2020-06-01 00:01.
+- **Holdout:** 2024-01-01 → 2026-09-30 (1,004 days), one shot, started flat on 2024-01-01 from decisions at the
+  2023-12-31 close.
+
+### Null
+- Random coin choice with the same exposure: on each decision day the candidates' scores are shuffled among the
+  candidates of the same volatility tercile. Volatility here is recent volatility: the square root of an EWMA
+  (weight 0.06 on the newest day, λ = 0.94) of squared daily log close-to-close returns up to the decision close,
+  defined once 30 returns exist. Candidates are sorted by it (ties by symbol) and split into 3 near-equal groups;
+  candidates without a volatility form a fourth group. The number of eligible coins each day (so the cash share and
+  the market exposure) and the volatility mix of the choices are the actual path's; only which coins are chosen is
+  random. The holding rule then runs on the shuffled scores.
+- Statistic: the mean daily return with fees and slippage at 0 (funding and the delisting penalty kept), for the
+  actual path and each draw, through the same simulator and the same summation. 1,000 draws, seed 7007 (numba's
+  generator; the numpy, numba, pandas, scipy and Python versions are pinned at the sweep start),
+  p = (1 + #{null ≥ actual}) / 1,001.
+- The identity shuffle reproduces the actual statistic bit for bit, and its p-value is 1 (a unit test).
+
+### Null calibration
+Run by `r7-calibrate` at commit `d638eaf` (`research/round7/null_calibration.csv`), before any data. Synthetic daily panels of 1,400 days; prices from simple returns. In every **no-edge** scenario
+every coin has the same conditional expected simple return each day, so no rule can beat a random choice:
+- **iid:** 16 coins, equal volatility, no factor.
+- **factor:** volatility 2–8%/day, one market factor (bull, bear and flat regimes in the common drift) whose shocks
+  scale with beta ∝ volatility, t(3) shocks.
+- **garch:** factor plus volatility clustering (GARCH(1,1) on each coin's own shocks).
+- **churn:** factor with 26 coins, 15 members a month, late listings, a delisting with a −30% forced exit, random
+  positive funding.
+- **cluster:** beta independent of volatility, three sector factors, common jump days (2%) with random loadings.
+
+Information rows: **beta_tilt** (the drift itself scales with beta, so high-beta coins earn more in the bull regime:
+a structural tilt, not a no-edge panel) and two planted cross-sectional momentum edges (power). 1,000 panels per
+no-edge scenario, 499 draws each, rejection at p < 0.05 (exactly 5% under exchangeability at 499 draws):
+
+| Scenario | Kind | Planted edge | Panels | Rejected at p < 0.05 | s.e. | Mean p |
+|---|---|---|---|---|---|---|
+| iid | no-edge | – | 1,000 | 5.8% | 0.7% | 0.472 |
+| factor | no-edge | – | 1,000 | 4.1% | 0.6% | 0.516 |
+| garch | no-edge | – | 1,000 | 4.9% | 0.7% | 0.514 |
+| churn | no-edge | – | 1,000 | 6.4% | 0.8% | 0.490 |
+| cluster | no-edge | – | 1,000 | 5.7% | 0.7% | 0.486 |
+| beta_tilt | tilt (information) | – | 400 | 5.2% | 1.1% | 0.503 |
+| factor | planted edge (power) | 0.015 | 200 | 45.5% | 3.5% | 0.139 |
+| factor | planted edge (power) | 0.03 | 200 | 89.5% | 2.2% | 0.022 |
+
+The rule fixed before the calibration ran: a rejection rate ≤ 7% in every no-edge scenario; the registration
+commands refuse to run unless the committed calibration meets it. **Every no-edge scenario is within the limit** (the largest is churn, 6.4%). Pooled over the 5,000 no-edge
+panels the rate is 5.4% ± 0.3%: the null is very slightly liberal, so a p-value just under 0.05 is a little weaker
+evidence than it looks. The beta-drift tilt is not picked up as skill (5.2%). A planted momentum edge (each coin's
+next return gains edge × its volatility × its standardised 14-day idiosyncratic return) is detected 45.5% of the time
+at 0.015 and 89.5% at 0.03. The calibration file stores the SHA256 of the code that decides it
+(`4a6e0727ec69e3e94275f560b594323fa15a99826482e51f3d87f27c4dd9907c`: `rotation_sim.py`, `r7_rotation.py`,
+`round7_calib.py`), and the round's commands refuse to run unless it still matches.
+
+### Power table
+`power_table_practical`, iid Gaussian daily returns, 40,000 simulations, seed 7 (`research/round7/power_table.csv`):
+dev = 1,309 days passing when the mean is > 0 and the DSR at N_eff is ≥ 0.95; holdout = 1,004 days passing when its
+mean is > 0 and its Sharpe is ≥ 50% of dev's. The null, 2×-cost, year-share, plateau, breadth and drawdown gates are
+not modelled (they can only lower these numbers).
+
+| True annual Sharpe | P(dev) N_eff < 2 | P(dev) N_eff 2 | P(dev) N_eff 6 | P(pass) N_eff < 2 | P(pass) N_eff 2 | P(pass) N_eff 6 |
+|---|---|---|---|---|---|---|
+| 0 | 4.7% | 1.5% | 0.2% | 0.9% | 0.2% | 0.0% |
+| 0.5 | 24.2% | 11.1% | 2.3% | 10.6% | 4.1% | 0.6% |
+| 0.75 | 41.3% | 22.9% | 6.4% | 24.0% | 11.8% | 2.6% |
+| 1.0 | 59.8% | 39.2% | 14.4% | 41.9% | 25.6% | 8.0% |
+| 1.25 | 76.5% | 57.6% | 27.7% | 60.8% | 44.0% | 19.3% |
+| 1.5 | 88.1% | 74.7% | 45.1% | 75.7% | 63.0% | 36.0% |
+| 2.0 | 98.4% | 94.9% | 80.4% | 91.7% | 88.2% | 74.0% |
+
+- **What it means:** 3.6 years of daily returns cannot confirm a modest edge. The 6 configs overlap heavily, so the
+  family's N_eff will probably be below 2 (no deflation); then the DSR gate needs a realised dev Sharpe of about 0.87.
+  A strategy with a true Sharpe of 1.0 passes dev about 60% of the time and the whole test about 42%; a true 0.5,
+  24% and 11%. With no edge at all it passes dev 4.7% and the whole test 0.9% of the time (on these two gates).
+- **Implied dev Sharpe needed (approximately):** 0.87 at N_eff < 2, 1.14 at 2, 1.32 at 3, 1.56 at 6.
+
+### Dev gates (primary config, L = 14, H = 6)
+1. At least 100 trades. A trade is a holding episode of one coin, from its first buy to its full exit; resizes
+   inside it are not counted.
+2. Mean daily return > 0 at 2× fees and slippage.
+3. Null p < 0.05.
+4. DSR ≥ 0.95 at the family's N_eff (Amendment 1): `stats.effective_trials` of the 6 configs' dev daily returns,
+   null variance 1/(T−1), no deflation when N_eff < 2.
+5. Best calendar year ≤ 65% of the summed dev daily returns (2020 counts from June).
+6. Plateau: the 3 neighbours have a positive total return at base costs.
+7. Breadth: at least 60% of the coins with at least 5 trades have a positive summed net P&L, with at least 10 such
+   coins.
+
+PBO (CSCV over the 6 configs, 16 slices) is reported only (Amendment 2).
+
+### Holdout gates
+1. Mean daily return > 0.
+2. Sharpe ≥ 50% of the dev Sharpe (both daily × √365).
+3. Worst end-of-day drawdown ≤ the 95th percentile of a block bootstrap of the dev daily returns: block 30, 10,000
+   paths of 1,004 days, seed 7 (computed at the sweep and stored in `RT.json`).
+
+### Verdict
+- **PASSES IN PRACTICE** = every dev gate and every holdout gate. RT then becomes a candidate for a separately
+  registered paper book, or small real money at the owner's decision, starting at reduced risk. Nothing is automatic.
+- **FAIL:** RT is closed on this universe. No reruns or variants without a new registration and new trials.
+- Any error after the holdout unlock (loading, simulation, gates) is a FAIL, recorded as such (no fix, no rerun).
+
+### Holdout lock and run order
+1. `r7-calibrate` and `r7-power` (synthetic only), committed with the code before this section.
+2. `r7-download`: the blind build of the 38 coins, the data report and the manifest, committed.
+3. `r7-sweep` logs a start record and stops. The record pins the version and the SHA256 of the 17 code files, the
+   manifest, the universe, `F1_dev_daily.parquet` and this section's committed text, plus the library versions.
+   The run log is committed; `r7-sweep` again runs dev. A sweep is refused if any start record for its version, in
+   the working copy or any committed version of the log, has different pins. A version runs dev once: a run record
+   is logged before it starts, and any error before the dev verdict is logged as a hard error (a fix needs a version
+   bump). The verdict (`RT.json` and an `r7-sweep` record with the gates) is saved before anything else is written.
+4. `r7-validate --unlock-holdout` runs only if every dev gate passed: the pins must be unchanged, and `RT.json`, the dev
+   daily returns, a committed passing `r7-sweep` record, the trial registry, the data report, the manifest, the power
+   table, the calibration and `F1_dev_daily.parquet` must be committed. It logs a validate-start record in the run
+   log and then one structured `[R7: RT v1]` record in `research/holdout_log.jsonl`. Unlocks are counted over every
+   committed version of both logs and their working copies. A crash before the result may be resumed once
+   (`[R7 resume`). After a recorded holdout result or failure the version is closed, and once the holdout is touched
+   the dev sweep can never run again. Independent checks, only after the holdout verdict, log each load as
+   `[R7 verify`.
+- **Hard checks of the simulator** (an entry without a price or on a non-candidate, more than 3 holdings, weights
+  above 1, equity ≤ 0, the P&L identity) raise errors; in dev they stop the sweep, in the holdout they are a FAIL.
+
+### Trials and multiple testing
+- 6 dev trials in the global registry (`research/trials.csv`), version 1, with their daily returns in
+  `reports/results/RT_trial_returns.parquet`. The project's ratcheted N_eff is updated; `run.cmd_gates` is not called.
+- Reported: DSR at the raw N = 6, at the N_eff of RT's 6 configs together with XS's 6, and the strict tier: DSR on
+  dev + holdout at N = max(ratcheted project N_eff, 14.85 + 4 = 18.85) (+4: one per family after Round 4: D1, XS,
+  M1, RT).
+
+### Reported, not gated
+- PBO; per-year results against the equal-weight hold; per coin; meme coins against the rest; the result without the
+  best coin (re-run without it); no daily resize; 2× costs in full.
+- Alpha PSR and beta against the membership-masked equal-weight daily-rebalanced hold of the month's members.
+- Correlation and HAC alpha against F1 (dev 2020-06 → 2023; holdout against F1's 2024–26 results).
+- Weekly t, turnover, fees and funding paid, days with an order, days invested, exits by reason.
+
+### Disclosures
+- **Not blind to the period:** the general crypto market of 2024–26 is known (the BTC/ETH/SOL results of earlier
+  rounds, and that memes and some new listings rallied). Which non-major coins led in which month has not been
+  looked at.
+- **Seen before:** the same universe's dev years were used by Round 4 (U1, a breakout), and the 5 majors' results of
+  every round. Cross-sectional momentum among the majors (XS) failed. Round 4's data report lists whole-file counts
+  of extreme minutes (a move above 30% within a minute or a 50% range) for the 71 dev coins, which include 2024+
+  rows; they are counts of bad-looking bars, not returns, and the Round 7 report shows only the blind counts.
+- **Memes:** up to 10 of the 15 monthly members in 2024–26 are memes (from the universe file's `is_meme`, which is
+  membership, not prices). There is no meme cap; the meme split is reported.
+- **Approximations:** taker fills at the 00:01 open with fixed slippage tiers (no market impact model beyond them);
+  daily resizes are traded in full, however small; funding is charged at the minute's open; one account, so no
+  margin model beyond gross ≤ 1×.
+- **Changes from the approved plan, decided before any data:**
+  - **The null groups coins by recent (EWMA) volatility, not the plan's 30-day volatility.** A dry run of the
+    calibration (synthetic only, before this registration) showed that 30-day volatility lags volatility bursts. On
+    a GARCH panel where the generator gave coins in a burst a higher expected return, 30-day groups rejected 7.0%
+    (400 panels, 199 draws) and EWMA groups 5.0%; 10-day groups (7.0%) and 5 groups (8.3%) did no better. On
+    panels with no edge at all the two were alike (4.8% and 4.3%).
+  - **The calibration generator was rebuilt after that dry run.** The first version built log returns with a fixed
+    drift correction. Under t(3) shocks and GARCH, that gave high-volatility coins a higher expected simple return,
+    which is a real, predictable edge, so those panels were not "no edge"; its "beta" scenario also scaled the drift
+    with beta. The dry run rejected 5.3% (iid), 4.1% (beta), 9.9% (garch) and 7.1% (churn) of 1,000 panels each.
+    With equal expected simple returns, the garch and churn panels gave 4.8% and 5.8% (400 panels). The beta-drift
+    case is kept as an information row (beta_tilt). The cluster scenario was added after the second code review.
+  - **The gap-in-lookback boundary is strict** (the last gap must end more than L days before the decision), after
+    the first code review found that a gap ending exactly at 00:00 left C_{D−L} as a stale pre-gap price.
+  - **PBO is reported, not gated** (Amendment 2 above). The plan already said so; the rulebook needed the amendment.
+  - **Any error after the holdout unlock is a FAIL**, not only an integrity error (second review: a crash could
+    otherwise leave the holdout opened with no verdict). The verdict is saved before any result file is written.
+  - **Pins:** the sweep start record pins the SHA256 of 17 source files (simulator, rule, runner, engine, statistics,
+    metrics, store, config, universe, Round 4/5 helpers, registry, CLI, calibration), the data manifest, the universe,
+    `F1_dev_daily.parquet`, this section's committed text, and the numpy, numba, pandas, scipy and Python versions.
+    The calibration file pins the SHA256 of the code that decides it (simulator, rule and null, calibration module).
+  - Two independent code reviews and a re-review of the fixes ran on synthetic data before this commit; every
+    finding was fixed in the registered code. One reviewer's independent pure-Python account matched the simulator
+    to 7e-16 over fuzzed panels, and engine parity holds for forced exits at 00:00, at the fill minute and with
+    missing rows.
+- **The universe's holdout membership is known:** which coins were among the 15 most liquid non-majors in each month
+  of 2024–26 was computed in Round 4 from daily quote volume (no prices or returns were looked at).
