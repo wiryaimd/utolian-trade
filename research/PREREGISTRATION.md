@@ -1072,3 +1072,27 @@ PSR ≥ 0.95, not met. Both measures D1 failed in dev got worse: year share 0.61
 
 Consequences, as fixed above: Round 5's FAIL stands, and the forward test continues unchanged. Full tables are in
 `research/D1/README.md` section 8.5 and `research/D1/results/holdout_*.csv`.
+
+## Deviation 3: F2 on 2024-2026, owner-approved (2026-10-18, recorded BEFORE the evaluation)
+
+F2 failed Round 3's dev gates on DSR and plateau, so under the registered rules its holdout stays locked. On
+2026-10-18 the owner asked for its 2024-2026 backtest anyway.
+
+**How it runs:**
+- Round 3's registered holdout procedure, exactly as F1's was run under Deviation 1.
+- F2's chosen config: 1h bars, n = 96, k = 3.5, channel exit. Code and costs are unchanged.
+- Command: `python -m btcq.research.run r3-validate --strategy F2 --unlock-holdout`, with one unlock logged in
+  `research/holdout_log.jsonl`.
+- Window: 2024-01 → the latest archive date, as for F1.
+- Scope: Round 3's holdout gates on the 4-alt portfolio (ETH/SOL/XRP/BNB); the BTC sleeve is information only.
+- No other Round 3 family is evaluated: F3-F6's holdouts stay unused. This is not a new trial, so the registry and
+  N_eff are unchanged.
+- Independent checks may load the same window; each is logged with the tag `[R3 F2-info verify`.
+
+**What it can and can't mean:**
+- F2 cannot become a final pass, because `final_pass` requires a dev pass.
+- Its holdout is labelled clean, so this is out-of-sample evidence for F2. Two disclosures limit that:
+  - the general 2024-26 behaviour of these markets is known;
+  - the 2024-26 result of its close relative F1 has been seen.
+- It will be reported in full: the summary, Round 3's holdout gates, the BTC sleeve, and comparisons with dev, with
+  F1's 2024-26 result and with holding the coins.
