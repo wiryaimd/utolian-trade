@@ -1,0 +1,5 @@
+yardstick,reference,d1_value,met,live_style_value,live_style_met,source,note
+mean daily return > 0,0.0,0.0003176221739096657,True,0.0003205021698232558,True,reports/results/D1_holdout_daily.parquet,"reference only, not a gate (PREREGISTRATION.md Deviation 2)"
+Sharpe >= half of dev's (0.68; dev 1.352 / 2 = 0.6761),0.68,0.9162907949272042,True,0.8421777438429351,True,reports/results/D1_holdout_daily.parquet,dev Sharpe from D1.json dev.sharpe
+worst end-of-day drawdown vs dev's 19% (18.98%),0.1898429581511777,0.11869570024769427,True,0.12531792703723954,True,reports/results/D1_holdout_daily.parquet,met = not deeper than dev's; dev live-style was 0.2857
+alpha PSR vs equal-weight hold vs 0.95,0.95,0.811822951688709,False,0.7600165542711708,False,reports/results/D1_holdout_daily.parquet + reports/results/D1_holdout_bench.parquet,stats.beta_alpha; dev was 0.8836

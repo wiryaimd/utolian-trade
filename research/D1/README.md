@@ -10,11 +10,19 @@
 >   8 checks fixed in advance. It passed 6 and failed 2:
 >   - one year (2021) produced 61% of all its profit (the limit was 50%);
 >   - it could not be told apart from simply holding a small amount of the coins (alpha PSR 0.884; the bar was 0.95).
-> - **What followed.** By the pre-registered rules, the D1 family is closed on these 5 markets. The 2024–2026 test
->   data (the "holdout") was never unlocked for Round 5.
+> - **What followed.** By the pre-registered rules, the D1 family is closed on these 5 markets. Round 5's rules
+>   unlocked none of the 2024–2026 test data (the "holdout"). D1's part of it was later opened once, as information
+>   only (last bullet). XS's holdout stays locked.
 > - **Now.** At the owner's request, D1 has run on the VPS since 2026-10-17 07:33 UTC as an **information-only paper
 >   book**. It sends no orders to Binance and never adds to F1's risk. Its result can never, by itself, make D1 a
 >   validated strategy.
+> - **2024–2026 (information only).** On 2026-10-18 the owner asked to see D1 on the holdout window anyway. After
+>   that request was recorded as Deviation 2, D1 ran once, unchanged, on 2024-01-01 → 2026-09-30 (section 8.5).
+>   D1 made **+34.6%** (hold +106.2%), with a Sharpe of **0.92** (hold 0.75) and a worst drawdown of **11.9%**
+>   (hold 61.7%). But its alpha PSR was **0.81** (the dev gate's bar was 0.95), and 2024 gave **89%** of its summed
+>   daily return (the dev gate's limit was 50%). What it means: D1 stayed positive and fell far less than the coins,
+>   but the two measures it failed on got worse. This run cannot make D1 pass, and it changes nothing in the forward
+>   test.
 >
 > Key numbers, dev period 2020-01-01 → 2023-12-31 (1,461 days), after fees, slippage and funding:
 >
@@ -45,6 +53,7 @@
 6. [Results (dev period 2020–2023)](#6-results-dev-period-20202023)
 7. [Why it failed, in plain words](#7-why-it-failed-in-plain-words)
 8. [What was decided](#8-what-was-decided)
+   - 8.5 [The 2024-2026 information run (Deviation 2)](#85-the-2024-2026-information-run-deviation-2)
 9. [The live shadow paper test](#9-the-live-shadow-paper-test)
 10. [Files and how to reproduce](#10-files-and-how-to-reproduce)
 11. [Glossary](#11-glossary)
@@ -54,7 +63,8 @@ Conventions used in this document:
 - All times are UTC. The daily close at 00:00 UTC is 08:00 on the owner's UTC+8 clock.
 - "bp" means basis point: 1 bp = 0.01%.
 - Every term in *italics* the first time it appears is also explained in the [glossary](#11-glossary).
-- Line numbers such as "PREREGISTRATION.md:432" refer to the repository at commit `68c2489`.
+- Line numbers such as "PREREGISTRATION.md:432" refer to the repository at commit `68c2489`. The Deviation 2
+  section (PREREGISTRATION.md:1020-1053) was appended later, in commit `5dd793a`; no earlier line moved.
 - Numbers come from `reports/results/D1.json` and the derived tables in `research/D1/results/`, unless another
   source is named.
 
@@ -311,12 +321,17 @@ BTC has no overlap, so its stitch jump was measured on adjacent minutes (spot cl
 | Window | Dates | Days | Status |
 |---|---|---|---|
 | *Dev period* | 2020-01-01 → 2023-12-31 | 1,461 | Used for the test. |
-| *Holdout* | 2024-01-01 → 2026-09-30 | 1,004 | **Locked. Never unlocked by Round 5.** |
+| *Holdout* | 2024-01-01 → 2026-09-30 | 1,004 | **Not unlocked by Round 5's rules.** D1's run on it was opened once, as information only, under Deviation 2 (2026-10-18; section 8.5). **Still locked for XS.** |
 
 - The holdout could be unlocked only once, and only if XS passed every dev gate (PREREGISTRATION.md:529-532).
   D1's holdout run would have been information only, inside that unlock.
-- XS failed, so nothing was unlocked. `research/holdout_log.jsonl` has 3 lines and none of them is a Round 5 unlock.
-- This document did not read any 2024+ data.
+- XS failed, so Round 5's rules unlocked nothing. At that time `research/holdout_log.jsonl` had 3 lines, and none
+  of them was a Round 5 unlock.
+- On 2026-10-18 the owner approved Deviation 2 (PREREGISTRATION.md:1020-1053). It added line 4 of the log, the one
+  unlock for D1's information run, and lines 5-6, two logged loads by independent checks. XS was not evaluated, so
+  XS's holdout stays locked (for how clean it still is, see section 8.5.2).
+- Apart from section 8.5, this document read no 2024+ data. Section 8.5 uses the saved Deviation 2 results; two of
+  its independent checks loaded the 2024–2026 window after logged unlocks.
 
 ### 5.4 Engine, costs and assembly
 
@@ -677,8 +692,10 @@ been re-evaluated. This is a caveat, not a change to the recorded result.
 - For this document, D1 was re-run on dev data only with the project code. The daily returns and equity matched
   `D1_dev_daily.parquet` and `D1_dev_equity.parquet` exactly (difference 0.0); all 1,304 trades matched; 100 of 100
   checked numbers matched D1.json, D1_configs.csv, trials.csv and D1_dev_dists.npz (largest difference 7e-15).
-- Since the results commit `8d511ff`, `round5.py`, `r5_d1.py` and `engine.py` have not changed. `stats.py` only gained
-  a new function (`power_table_td`).
+- Since the results commit `8d511ff`, `r5_d1.py` and `engine.py` have not changed. `stats.py` only gained a new
+  function (`power_table_td`). `round5.py` changed once, in `5dd793a` (Deviation 2): it gained the `r5-d1-info`
+  command (`preflight_d1_info`, `cmd_d1_info`), and `d1_evaluate` now also returns each sub-sleeve's results so they
+  can be saved. The dev evaluation is otherwise unchanged.
 
 ### 6.12 Numbers that are easy to mix up
 
@@ -739,7 +756,8 @@ These consequences were written down **before** the run (PREREGISTRATION.md:473-
   XRP and BNB.
 - XS failed too (PBO 0.578, weekly correlation with F1 0.441, HAC alpha t 1.41). So "nothing passes" applied:
   **F1 stays alone, and the 1-trade-a-day target is retired for these 5 markets.**
-- No holdout was unlocked.
+- No holdout was unlocked under Round 5's rules. (Two days later, D1's window was opened once as information under
+  Deviation 2; see section 8.5. XS's holdout stays locked.)
 - Round 5's result did not trigger the bot work that only a pass would have started (a daily/weekly scheduler and
   netted per-market targets for a real sleeve). The shadow book added later at the owner's request (`68c2489`,
   section 9) does run D1's daily decisions inside the paper bot, but un-netted, on paper only and for information
@@ -754,7 +772,555 @@ Later context:
   sizing) to 11 Binance TradFi perps, but traded long and short, on trading days with σ × √252, and was tested on
   Yahoo/EIA daily proxies for 1986–2015 (PREREGISTRATION.md:705-719). It also failed dev (commit `d4cb213`: "M1 fails
   8 of 9 gates").
-- On 2026-10-17 the owner asked to run D1 on the paper bot anyway, as information only. That is the next section.
+- On 2026-10-17 the owner asked to run D1 on the paper bot anyway, as information only. That is section 9.
+- On 2026-10-18 the owner asked to see D1 on the 2024–2026 holdout window too, as information only (Deviation 2).
+  That is the next section, 8.5.
+
+---
+
+### 8.5 The 2024-2026 information run (Deviation 2)
+
+> **In short.** On 2026-10-18 the owner asked to see D1 on Round 5's holdout window, 2024-01-01 → 2026-09-30,
+> although D1 had already failed. The request was written down and committed first (Deviation 2). Then D1 ran once,
+> unchanged. D1 made +34.6% with a worst drawdown of 11.9%. Holding the 5 coins made +106.2% with a worst drawdown of
+> 61.7%. The two measures D1 failed on in dev got worse: alpha PSR 0.812 (the dev gate's bar was 0.95) and year
+> share 0.894 (the dev gate's limit was 0.50). The run is information only. **It cannot make D1 pass Round 5, and
+> it does not change the forward test.**
+
+Sources for this section:
+
+- `reports/results/D1.json`, key `holdout` (written by the run), and the run's result files
+  `reports/results/D1_holdout_*.parquet` (section 10.2).
+- The derived tables `research/D1/results/holdout_*.csv` (section 10.3).
+- Three independent checks (section 8.5.10). Numbers that only a check produced say so.
+
+"Hold" means equal amounts of the 5 perps, rebalanced at every daily close, without funding. It is Round 5's
+benchmark (`round5.ew_benchmark`). All 5 perps traded for the whole window.
+
+#### 8.5.1 Why it ran
+
+- D1 failed Round 5's dev gates (section 6.2). Its holdout had been registered as contaminated: information only,
+  and run only inside an XS unlock. XS failed, so Round 5's rules opened nothing (section 8).
+- On 2026-10-18 the owner asked to see D1 on 2024–2026 anyway, "as the most relevant years", accepting that this is
+  outside the registered rules (PREREGISTRATION.md:1020-1024).
+- The request was recorded as **Deviation 2** (PREREGISTRATION.md:1020-1053) and committed **before any 2024+ data
+  was loaded**. That text fixed what runs, what must be reported, and what the result can and can't mean.
+
+| Commit / event | Time (UTC) | What |
+|---|---|---|
+| `5dd793a` | 2026-10-18 13:48:36 | Deviation 2 text, the `r5-d1-info` command (`round5.cmd_d1_info`) and its test (`test_d1_info_run_needs_the_committed_deviation_runs_once_and_leaves_xs_alone`). |
+| unlock | 2026-10-18 13:48:51 | `research/holdout_log.jsonl` line 4, tag `[R5 D1-info: D1 only, information; XS stays locked]`. 15 seconds after the commit. |
+| `r5-d1-info` run | 2026-10-18 13:49:07 | `research/round5/runs.jsonl` line 3: git `5dd793a`, clean tree. |
+| check unlock | 2026-10-18 13:51:45 | holdout_log line 5, `[R5 D1-info verify resim]` (independent re-simulation). |
+| check unlock | 2026-10-18 13:53:29 | holdout_log line 6, `[R5 D1-info verify context]` (benchmark and context check). |
+
+What Deviation 2 said must be reported (PREREGISTRATION.md:1037-1046), and where to find it:
+
+| Required item | Section |
+|---|---|
+| Total return, CAGR, Sharpe, worst end-of-day drawdown, weekly t | 8.5.3 |
+| Beta and alpha PSR against the equal-weight hold | 8.5.3 |
+| D1 and the hold for each year (2024, 2025, 2026 to 30 September), and the year share | 8.5.4 |
+| Results per coin and per lookback | 8.5.5, 8.5.6 |
+| Activity, fees and funding | 8.5.7 |
+| The account added up the live way (each sub-sleeve keeps its own cash, no rebalancing) | 8.5.8 |
+| Reference yardsticks (not gates) | 8.5.9 |
+
+#### 8.5.2 What ran
+
+- **The rule: unchanged.** The registered rule and primary config (all9), with Round 5's code and costs (section 3).
+  `r5_d1.py` and the engine have not changed since the dev results. `5dd793a` only added the command to `round5.py`
+  and made `d1_evaluate` also return each sub-sleeve's results, so they could be saved.
+- **The window:** 2024-01-01 → 2026-09-30, 1,004 days (Round 5's holdout). Signals use the earlier history as usual.
+- **One main engine run per sub-sleeve, plus the 2× cost stress.** `d1_evaluate` always makes the stress run, so
+  every sub-sleeve was run a second time at 2× fees and slippage. Deviation 2's text says "one engine run per
+  sub-sleeve and no shift null"; the stress run is the one run beyond that. The circular-shift null was not run, so
+  there is no p-value.
+- **One logged unlock**, made by `python -m btcq.research.run r5-d1-info --unlock-holdout`. The command refuses to
+  run a second time (section 10.2).
+- **XS was not evaluated.** XS's holdout stays locked. Deviation 2 called it "locked and clean". Note, though, that
+  this document now gives each coin's measured 2024–2026 price change (section 8.5.5). That adds to Round 5's
+  disclosed general knowledge of the period's relative moves (PREREGISTRATION.md:523-524) for any later test of XS,
+  or of XS-like ideas, on these coins.
+- **Not a new trial.** `research/trials.csv` and `research/neff_history.jsonl` are unchanged.
+- **Start of the window.** The start is state-synchronous (section 3.1): the 26 sub-sleeves already long on the
+  2023-12-31 decision all entered at 2024-01-01 00:01.
+- **End of the window.** The 26 positions still open were closed at the 2026-09-30 23:59 close × (1 − slippage),
+  with the 5 bp taker fee, and booked on the last day (exit reason "end"). This end-of-window convention cost about
+  0.03 percentage points of total return (section 8.5.10).
+- **Integrity:** 0 R floors and 0 engine-vs-rule mismatches (D1.json).
+- D1.json labels the result: `holdout_status` = "contaminated: information only (owner-approved Deviation 2, run
+  after D1 failed dev)".
+
+#### 8.5.3 Headline: D1 vs the hold
+
+Research account (rebalanced daily, as in section 6), after fees, slippage and funding. Sources: D1.json `holdout`
+and `results/holdout_headline.csv`; the hold's volatility comes from the context check.
+
+| Metric | D1 | Equal-weight hold |
+|---|---|---|
+| Total return | +34.56% (\$10,000 → \$13,456) | +106.17% (\$10,000 → \$20,617) |
+| CAGR (growth per year) | 11.40% | 30.09% |
+| Sharpe (yearly) | 0.916 | 0.748 |
+| Sortino / Calmar | 1.12 / 0.96 | |
+| Yearly volatility of daily returns | 12.65% | 56.4% |
+| Worst drawdown, end of day | 11.87% | 61.68% |
+| When | peak 2025-10-08 (\$14,260), low 2026-08-06 (\$12,567); not recovered by 2026-09-30, when D1 was still 5.6% below the peak | peak 2025-10-06, low 2026-06-25; not recovered by 2026-09-30 |
+| Longest time under water | 357 days | |
+| Positive years | 3 of 3 | 1 of 3 |
+| Days with exactly 0 return | 6.87% | |
+| PSR(0), chance the true Sharpe > 0 | 0.935 | |
+| Weekly t | 1.47 (144 weeks; mean +0.22% a week, sd 1.82%) | |
+| Daily correlation with the hold | 0.761 | |
+| Beta to the hold | 0.171 | |
+| Alpha (after beta) | 4.38% a year, Sharpe 0.53 | |
+| **Alpha PSR vs the hold** | **0.812** (dev 0.884; the dev bar was 0.95) | |
+| **Year share** | **0.894, year 2024** (dev 0.610; the dev limit was 0.50) | |
+
+Other reference points over the same 1,004 days (context check, from daily closes, without funding):
+
+| | Total return | Sharpe | Worst drawdown |
+|---|---|---|---|
+| BTC perp alone | +97.5% | 0.76 | 53.0% (2025-10-06 → 2026-06-30) |
+| A fixed 17.1% of the account in the hold (D1's beta), the rest in cash | +20.4% | 0.75 | 13.7% |
+| A fixed 22.4% in the hold (D1's volatility), the rest in cash | +26.9% | | 17.7% |
+
+D1 beat both fixed mixes. (In dev, the beta-matched mix, 13.5% in the hold, made +81.7% with a 16.0% drawdown and a
+Sharpe of 1.39, against D1's +138.8%, 19.0% and 1.35.)
+
+**By month** (33 months; `results/holdout_monthly_equity.csv`):
+
+- In the 19 months the hold rose, D1 averaged +3.1%; the hold averaged +15.0%.
+- In the 14 months the hold fell, D1 averaged −1.85%; the hold averaged −11.6%.
+- (Dev 2020–2023, context check: +4.7% vs +30.3% in up months, −1.4% vs −14.5% in down months.)
+- D1 lost money in 21 of the 33 months.
+- Three months, February, March and November 2024 (+10.9%, +8.4%, +22.4%), made more than the whole gain. The other
+  30 months together lost about 8.5%.
+
+#### 8.5.4 Year by year
+
+"Share of summed daily" is the year-share measure gated in dev: the year's sum of daily returns divided by the
+window's total (0.319). Drawdowns are given two ways: from that year's own high, and from the highest value since
+2024-01-01 ("window peak"). Source: `results/holdout_yearly.csv`.
+
+| Year | Days | D1 return | Hold return | D1 Sharpe | Hold Sharpe | D1 worst drawdown (year high / window peak) | Hold worst drawdown (year high / window peak) | Share of summed daily | Share of trade R | Trades entered | Average open sub-positions |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2024 | 366 | +31.26% | +134.78% | 1.76 | 1.83 | 10.82% / 10.82% | 26.88% / 26.88% | **89.4%** | 78.8% | 374 | 20.9 |
+| 2025 | 365 | +0.41% | −4.15% | 0.09 | 0.23 | 9.42% / 10.55% | 42.63% / 42.63% | 3.5% | 9.2% | 327 | 15.5 |
+| 2026 (to 30 Sep) | 273 | +2.10% | −8.38% | 0.42 | 0.04 | 5.68% / 11.87% | 47.41% / 61.68% | 7.1% | 12.1% | 266 | 8.9 |
+| 2024–2026 | 1,004 | +34.56% | +106.17% | 0.92 | 0.75 | 11.87% | 61.68% | 100% | 100% | 967 | 15.7 |
+
+The chart shows the growth of 100 from 2023-12-31, at the end of every odd month (18 points: the first step is one
+month, the others two). The line that climbs to about 313 is the hold; the lower line is D1. Some extremes fall
+between samples: the hold's peak (350.7 on 2025-10-06, the start of its 61.7% drawdown; from
+`D1_holdout_bench.parquet`), the hold's lowest month-end after its peak (135, end of 2026-06; its end-of-day low was
+134.4 on 2026-06-25), and D1's highest and lowest end-of-day values of its worst drawdown (142.6 on 2025-10-08, 125.7
+on 2026-08-06). (Data: `results/holdout_monthly_equity.csv`.)
+
+```mermaid
+xychart-beta
+    title "Growth of 100, D1 vs equal-weight hold, 2024-01 to 2026-09"
+    x-axis ["Start", "Jan 24", "Mar 24", "May 24", "Jul 24", "Sep 24", "Nov 24", "Jan 25", "Mar 25", "May 25", "Jul 25", "Sep 25", "Nov 25", "Jan 26", "Mar 26", "May 26", "Jul 26", "Sep 26"]
+    y-axis "Index, start 100" 0 --> 350
+    line [100, 98, 118, 113, 113, 109, 133, 136, 127, 128, 133, 136, 133, 131, 129, 127, 126, 135]
+    line [100, 95, 164, 152, 153, 143, 242, 268, 186, 226, 282, 313, 237, 197, 163, 168, 145, 206]
+```
+
+D1 alone, same points:
+
+```mermaid
+xychart-beta
+    title "Growth of 100, D1 alone, 2024-01 to 2026-09"
+    x-axis ["Start", "Jan 24", "Mar 24", "May 24", "Jul 24", "Sep 24", "Nov 24", "Jan 25", "Mar 25", "May 25", "Jul 25", "Sep 25", "Nov 25", "Jan 26", "Mar 26", "May 26", "Jul 26", "Sep 26"]
+    y-axis "Index, start 100" 90 --> 140
+    line [100, 98, 118, 113, 113, 109, 133, 136, 127, 128, 133, 136, 133, 131, 129, 127, 126, 135]
+```
+
+What it shows: D1 made almost all of its gain in 2024, in two bursts (February–March and November). After that it
+moved sideways. The hold rose far more, then fell hard from late 2025 (worst end-of-day drawdown 61.7%), while D1
+lost at most 11.9%.
+
+#### 8.5.5 By coin
+
+"Contribution" is the sum of the coin's 9 sub-sleeve daily returns divided by 45; the five add up to 0.319.
+"Stand-alone" means the coin's 9 sub-sleeves run as their own account. "Coin's own price change" is the perp's
+close-to-close change over the window (context check; it cannot be derived from the saved files). Source:
+`results/holdout_by_coin.csv`.
+
+| Coin | Trades | Win rate | Avg R | Avg hold (days) | Contribution | Share of total | Dev share | Stand-alone total / Sharpe / max drawdown | Coin's own price change |
+|---|---|---|---|---|---|---|---|---|---|
+| BTC | 199 | 37.7% | 0.30 | 19.6 | 0.045 | 14.2% | 15.6% | +21.3% / 0.53 / 16.5% | +97.5% |
+| ETH | 194 | 34.5% | 0.23 | 15.8 | 0.027 | 8.3% | 18.6% | +11.3% / 0.35 / 19.5% | +18% |
+| SOL | 192 | 38.0% | 0.20 | 15.1 | 0.018 | 5.5% | 30.9% | +6.9% / 0.26 / 19.0% | +16% |
+| XRP | 171 | 33.3% | 2.26 | 12.9 | 0.148 | **46.5%** | 6.0% | +90.5% / 1.00 / 23.2% | +142% |
+| BNB | 211 | 37.4% | 0.55 | 17.6 | 0.081 | 25.5% | 28.9% | +41.8% / 0.72 / 24.2% | +147% |
+| All | 967 | 36.3% | 0.67 | 16.3 | 0.319 | 100% | 100% | +34.6% / 0.92 / 11.9% | |
+
+- All 5 coins were positive again.
+- XRP and BNB, the two coins that rose most, gave 72% together. ETH and SOL, which rose only 16–18%, gave the least.
+  In dev the leaders were SOL and BNB.
+- XRP's result came from one rally. Nine XRP trades, one per lookback, entered 6–15 November 2024 produced 0.208 of
+  the 0.356 summed trade return (59%). That is more than XRP's whole summed trade return (0.194): its other 162
+  trades lost 0.014 in total. XRP gave 60% of all trade R (386 of 645). (`D1_holdout_trades.parquet`.)
+- In 2025, BTC (−0.015) and SOL (−0.012) contributed negatively (from `D1_holdout_sleeves.parquet`).
+
+Notable trades (`results/holdout_trade_stats.csv`):
+
+| | Trade | Result |
+|---|---|---|
+| Best by R | XRP L=5, 2024-11-06 → 2024-11-27 | +143.4 R, +1.93% of the account |
+| Best by account return | XRP L=20, 2024-11-08 → 2024-12-20 | +3.44% of the account (+60.9 R) |
+| Worst by R | ETH L=20, 2024-01-01 → 2024-01-04 | −19.0 R, but only −0.04% of the account |
+| Worst by account return | XRP L=360, 2025-07-18 → 2025-11-14 | −0.32% of the account (−0.82 R) |
+
+#### 8.5.6 By lookback and config
+
+"Stand-alone" means the 5 sub-sleeves of that lookback run as their own 5-coin account. Source:
+`results/holdout_by_lookback.csv`; dev Sharpe from section 6.5.
+
+| L (days) | Trades | Trades a week | Win rate | Avg R | Avg / median hold (days) | Contribution | Share | Stand-alone total | Stand-alone Sharpe | Dev stand-alone Sharpe | Stand-alone max drawdown |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 5 | 419 | 2.92 | 32.7% | 0.51 | 4.2 / 3 | 0.028 | 8.8% | +26.1% | 0.74 | 1.64 | 16.4% |
+| 10 | 225 | 1.57 | 35.1% | 0.69 | 7.7 / 6 | 0.038 | 11.9% | +37.8% | 1.00 | 1.60 | 16.9% |
+| 20 | 117 | 0.82 | 38.5% | 0.78 | 14.2 / 12 | 0.044 | 13.8% | +45.2% | 1.10 | 1.52 | 13.9% |
+| 30 | 86 | 0.60 | 33.7% | 0.94 | 19.4 / 15 | 0.040 | 12.4% | +39.3% | 0.95 | 1.54 | 15.9% |
+| 60 | 45 | 0.31 | 42.2% | 0.85 | 37.3 / 33 | 0.044 | 13.6% | +43.6% | 0.97 | 1.34 | 13.0% |
+| 90 | 30 | 0.21 | 60.0% | 1.01 | 56.0 / 40 | 0.043 | 13.6% | +43.3% | 0.96 | 1.04 | 12.0% |
+| 150 | 22 | 0.15 | 54.5% | 0.71 | 80.8 / 77 | 0.035 | 10.9% | +31.5% | 0.68 | 0.86 | 13.9% |
+| 250 | 14 | 0.10 | 42.9% | 0.40 | 123.4 / 120.5 | 0.015 | 4.7% | +10.4% | 0.30 | 0.92 | 16.5% |
+| 360 | 9 | 0.06 | 66.7% | 1.31 | 233.7 / 179 | 0.032 | 10.2% | +28.2% | 0.59 | 0.92 | 17.9% |
+
+- Every lookback made money on its own. Every one had a lower Sharpe than in dev; the biggest falls were at L = 5
+  (1.64 → 0.74) and L = 250 (0.92 → 0.30).
+- The slow group (150–360 days) lost money in 2025 (−0.014; context check).
+
+Coin × lookback contribution, in percent of the account (each cell is the sub-sleeve's summed daily return ÷ 45,
+× 100; the 45 cells add up to 31.9; computed from `D1_holdout_sleeves.parquet`):
+
+| Coin | 5 | 10 | 20 | 30 | 60 | 90 | 150 | 250 | 360 |
+|---|---|---|---|---|---|---|---|---|---|
+| BTC | 0.56 | 0.55 | 0.39 | 0.56 | 0.52 | 0.46 | 0.45 | 0.23 | 0.81 |
+| ETH | 0.12 | 0.60 | 0.19 | 0.40 | 0.49 | 0.78 | 0.29 | −0.16 | −0.05 |
+| SOL | 0.01 | 0.37 | 0.82 | 0.43 | −0.16 | 0.08 | 0.06 | −0.21 | 0.35 |
+| XRP | 1.53 | 2.22 | 2.85 | 1.97 | 1.73 | 1.40 | 1.22 | 0.95 | 0.94 |
+| BNB | 0.59 | 0.06 | 0.15 | 0.61 | 1.77 | 1.60 | 1.45 | 0.70 | 1.19 |
+
+4 of the 45 cells are negative (ETH at 250 and 360 days, SOL at 60 and 250); in dev, 3 were. XRP's row alone adds up
+to 14.8, almost half of the 31.9.
+
+The three configs (subsets of the same 45 runs; source: `results/holdout_headline.csv`):
+
+| Config | Trades | Total return | CAGR | Sharpe | Max DD | Weekly t | Year share | Alpha PSR (dev) | Beta |
+|---|---|---|---|---|---|---|---|---|---|
+| **all9 (primary)** | 967 | +34.56% | 11.40% | 0.916 | 11.87% | 1.467 | 0.894 | 0.812 (0.884) | 0.171 |
+| fast5 (5–60) | 892 | +38.86% | 12.68% | 1.056 | 13.03% | 1.526 | 0.816 | 0.895 (0.979) | 0.142 |
+| slow5 (60–360) | 120 | +31.45% | 10.45% | 0.739 | 12.26% | 1.302 | 0.931 | 0.673 (0.711) | 0.198 |
+
+- fast5 and slow5 share L = 60 (45 trades), so 892 + 120 − 45 = 967.
+- PBO over the 3 configs: 0.471 (dev 0.103). Plateau: 1.0 (both neighbours positive). Information only.
+- fast5 was again the best of the three, but its alpha PSR fell from 0.979 to 0.895. Picking fast5 after the dev run
+  would not have reached 0.95 here either.
+
+#### 8.5.7 Trades, activity and costs
+
+Source: `results/holdout_trade_stats.csv`; dev values from sections 6.6–6.8.
+
+| Statistic | 2024–2026 | Dev 2020–2023 |
+|---|---|---|
+| Completed sub-trades | 967 (all long; 351.5 a year) | 1,304 (about 326 a year) |
+| Wins / losses | 351 / 616 (win rate 36.3%) | 512 / 792 (39.3%) |
+| Average win / average loss | +3.90 R / −1.18 R | +5.24 R / −1.24 R |
+| Average R / median R | +0.67 R / −0.55 R | +1.31 R / −0.51 R |
+| Profit factor (in R) | 1.89 | 2.74 |
+| Total R | 645.2 | 1,702.5 |
+| Trade t-statistic (optimistic: trades overlap) | 3.05 | 6.86 |
+| Holding time | average 16.3 days, median 6, min 1, max 435 | 16.4, 6.5, 1, 302 |
+| Longest winning / losing streak (exit order; approximate, see the note below) | 14 / 37 | 26 / 35 |
+| Exit reasons | trailing line 941; "end" 26; stop 0 | 1,277; 27; 0 |
+| Entries at the window start (state-synchronous) | 26, at 2024-01-01 00:01 | |
+| R floors / engine-vs-rule mismatches | 0 / 0 | 0 / 0 |
+
+Note on the streaks: many sub-trades exit at the same minute (967 trades, only 363 distinct exit minutes; dev 1,304
+and 487), and their order decides the streak. The table takes same-minute exits in the trades file's order. Other
+orders of those ties give a longest winning streak of 11 to 20 and a longest losing streak of 34 to 40 (dev: 13 to 27
+and 35 to 37). The low ends come from 2,000 random tie orders; the high ends are the most any tie order allows.
+
+Activity:
+
+| Measure | 2024–2026 | Dev 2020–2023 |
+|---|---|---|
+| Completed sub-trades per week | 6.74 | 6.25 |
+| Days with at least one order | 65.7% | 64.0% |
+| Netted orders per day (one per coin per day with any change) | 1.352 (1.348 without the window-end closes) | 1.30 |
+| Un-netted sub-sleeve orders per day | 1.93 | 1.79 |
+| Open sub-positions | average 15.7 of 45; maximum 43 (2024-03-12); none open on 8.7% of days | 14.6; 42; 10.1% |
+| Open sub-positions by year (average) | 2024: 20.9 · 2025: 15.5 · 2026: 8.9 | |
+| Sub-sleeve fills on an active day | median 2, 95th percentile 7, maximum 26 (2024-01-01, the window start), not counting the window-end closes | 2, 7, 19 |
+| Mean gross exposure | 17.7% of the account | 14.2% |
+| Days with exactly 0 return | 6.87% | 8.35% |
+| Exposure tracking (actual vs daily-resized target) | mean 1.17, median 1.07, 5th–95th percentile 0.88–1.61; 1.2% of days outside 0.5–2 | mean 1.23, median 1.05, 0.80–2.86; 9.3% |
+
+Costs, summed over all trades in account-return units (each trade's amount divided by its sub-sleeve equity at
+entry, then divided by 45):
+
+| Item | Account-return units | Dollars, as % of the \$10,000 start | Dev, account-return units |
+|---|---|---|---|
+| Gross profit (after slippage, which is inside the fill prices) | 0.4112 | 40.36% | 1.4405 |
+| Fees | −0.0097 | −1.15% | −0.0107 |
+| Funding paid | −0.0458 | −4.87% | −0.3115 |
+| **Net** | **0.3557** | | 1.1182 |
+| Slippage (estimate) | 0.0030 | | 0.0032 |
+
+- Funding was again the largest cost, but much smaller than in dev: 4.7× the fees (dev 29×). BNB's sub-sleeves
+  received a net 0.001 of funding.
+- Per trade, fees averaged 0.033 R and funding 0.067 R (dev 0.030 R and 0.263 R).
+- 2× fees and slippage: mean daily return 0.000305 instead of 0.000318, a drag of 0.0125 of summed daily return over
+  the window (D1.json only; it needs an engine re-run).
+- The hold carries no funding. A 1× perp long would have paid roughly 19% of its position value in funding on BTC,
+  and about 13% on the equal-weight basket, over the window (context check, from real funding rates).
+
+Numbers that are easy to mix up:
+
+- **Two "year share" numbers.** The dev-gate measure is 0.894 (summed daily returns, 2024). D1.json's
+  `holdout.summary.max_year_share` is 0.788 (trade R grouped by entry year, also 2024).
+- **Two "exposure" numbers.** `holdout.summary.exposure` = 15.71 counts open sub-positions out of 45 (by minute).
+  `holdout.exposure.mean_gross_exposure` = 0.177 is position value as a share of the account.
+- **Two totals.** 0.356 is summed trade returns; 0.319 is summed daily account returns (section 6.8 explains why
+  they differ).
+
+#### 8.5.8 The live-style account
+
+The live paper book does not rebalance: each sub-sleeve keeps its own cash (section 9.3, difference 2). Deviation 2
+asked for this version too. Live-style equity on day t = (10,000 / 45) × Σ over the 45 sub-sleeves of
+Π(1 + daily return) up to t. Source: `results/holdout_headline.csv` and `results/holdout_yearly.csv`.
+
+| | Research (rebalanced daily) | Live-style (each pot drifts) |
+|---|---|---|
+| Total return | +34.56% | +34.34% |
+| CAGR | 11.40% | 11.33% |
+| Sharpe | 0.916 | 0.842 |
+| Worst drawdown, end of day | 11.87% (2025-10-08 → 2026-08-06) | 12.53% (2025-10-08 → 2026-08-10) |
+| Weekly t | 1.47 | 1.37 |
+| Beta / alpha PSR vs the hold | 0.171 / 0.812 | 0.184 / 0.760 |
+| 2024: return (Sharpe; worst drawdown from the year's high) | +31.26% (1.76; 10.82%) | +32.43% (1.66; 11.65%) |
+| 2025: same | +0.41% (0.09; 9.42%) | −0.23% (0.05; 11.27%) |
+| 2026 to 30 Sep: same | +2.10% (0.42; 5.68%) | +1.68% (0.33; 6.00%) |
+
+- Neither drawdown had recovered by 2026-09-30.
+- End weights by coin: XRP 28.5%, BNB 21.3%, BTC 17.8%, ETH 16.4%, SOL 15.9%. Per sub-sleeve: 1.45% (ETH, L = 250) to
+  5.25% (XRP, L = 20); equal would be 2.22%.
+- Here the two ways of adding up gave almost the same result. In dev they did not: live-style had a 28.57% drawdown
+  against 18.98% (section 9.3), with alpha PSR 0.747 (a new number from the context check's dev re-run).
+- Joining dev and 2024–2026 end to end, 2020-01-01 → 2026-09-30 (context check): live-style +205%, worst drawdown
+  28.6%, alpha PSR 0.79; research style +221%, 19.0%, 0.92.
+
+#### 8.5.9 Deviation 2's yardsticks (reference only, not gates)
+
+Source: `results/holdout_yardsticks.csv`.
+
+| Yardstick | Reference | D1 | Met? | Live-style | Met? |
+|---|---|---|---|---|---|
+| Mean daily return > 0 | 0 | 0.000318 | yes | 0.000321 | yes |
+| Sharpe at least half of dev's | 0.68 (dev 1.352 / 2 = 0.676) | 0.916 | yes | 0.842 | yes |
+| Worst drawdown against dev's 19% | 18.98% | 11.87% | not deeper | 12.53% | not deeper (dev live-style: 28.57%) |
+| Alpha PSR against 0.95 | 0.95 | 0.812 | **no** | 0.760 | **no** |
+
+Three of the four are met; alpha PSR is not. None of these is a gate, and meeting them changes no verdict.
+
+#### 8.5.10 Independent checks
+
+Three checks were made after the run, each with its own code. Deviation 2 allows such checks to load the window if
+each load is logged with the tag `[R5 D1-info verify` (PREREGISTRATION.md:1033-1034).
+
+| Check | What it did | Data access | Result |
+|---|---|---|---|
+| Re-simulation | A new state machine and per-minute cost accounting, written from the rule text in `r5_d1.py`. It did not use `d1_run`, `d1_assemble`, `d1_evaluate`, the engine, `donchian_state` or `to_engine`. | One logged load (holdout_log line 5) | Reproduced the saved results exactly (details below). |
+| Statistics | Recomputed every number Deviation 2 asks for from the saved files; re-ran the dev sub-sleeves on dev data only for the live-style comparison. | No 2024+ raw data; no unlock | All 123 checks against D1.json `holdout` and the dev records pass (largest difference 2e-14). The dev re-run matched `D1_dev_daily.parquet` exactly (1,304 trades). |
+| Context | Rebuilt the hold from raw daily closes; BTC, single coins, funding, F1 comparison and rolling windows. | One logged load (holdout_log line 6) | The rebuilt hold matches `D1_holdout_bench.parquet` exactly (max difference 0.0). Every recomputed D1 number matches D1.json. |
+
+**Re-simulation, in detail:**
+
+- Inputs: perp 1-minute bars and real funding, cut to before 2026-10-01; perp daily close = last 1-minute close of
+  each UTC day; the spot-stitched daily series as in section 5.2.
+- No fill minute or funding minute was missing in the window. Every coin had 3,012 real funding events (3 a day for
+  1,004 days), so no synthetic funding was used.
+- Trades: 967 vs 967 (941 trailing-line exits and 26 "end" in both). All 45 sub-sleeve counts equal. Matched on
+  (coin, lookback, entry time): 967 of 967, none left over; exit times equal for all 967.
+- Entry and exit prices, quantity and equity before the trade: relative difference 0. Fees, funding and net: at most
+  2e-15.
+- Totals over the 45 engine runs (\$10,000 each): fees \$5,176.82, funding \$21,913.08, net \$154,539.40, in both.
+- Daily returns: all 45,180 sub-sleeve cells and all 1,004 account days differ by 0.0. Total return 0.34561,
+  Sharpe 0.916, worst drawdown 11.87%: identical.
+- **The one difference found, and its cause.** The first version of the re-simulation marked the 26 positions still
+  open at the end at the raw 2026-09-30 close, with no exit costs. That gave 2.11e-4 more on the last day (total
+  return 0.345898 vs 0.345614). The engine instead closes them at the 23:59 close × (1 − slippage) and charges the
+  5 bp fee (section 8.5.2). With that added, the difference is exactly 0. It is a convention for the end of the
+  window, not an error.
+
+Side checks: the account daily return equals the mean of the 45 sub-sleeve columns, and the equity file equals
+10,000 × the compounded daily returns (difference 0.0 for both).
+
+**Not recomputed** (they need raw 2024+ data and an engine re-run, so they come from D1.json only): the 2× cost
+mean daily return (0.000305), the mismatch count (0) and the exposure tracking ratio. Mean gross exposure was rebuilt
+only approximately without prices: 0.17724 against the saved 0.17741, inside the rebuild's bounds of
+0.17527–0.17934.
+
+**Data access.** Nothing dated after 2026-09-30 was used. The context check loaded the full local files and cut them
+to before 2026-10-01 right after each load; it also cut F1's saved result rows dated 2026-10-01 → 10-13 before every
+comparison. XS was not evaluated and no `r5-` or `r6-` command was run. Apart from their two log lines and the new
+`research/D1/results/holdout_*.csv` tables, the checks changed no repository file.
+
+#### 8.5.11 Compared with dev 2020–2023
+
+Sources: D1.json `dev` and `holdout`, the result files, and the context check (gross exposure, alpha per year,
+correlation).
+
+| | Dev 2020–2023 | 2024–2026 |
+|---|---|---|
+| Sharpe (the hold's Sharpe) | 1.35 (1.39) | 0.92 (0.75) |
+| CAGR | 24.3% | 11.4% |
+| Worst drawdown | 19.0% | 11.9% |
+| Weekly t | 2.49 | 1.47 |
+| Beta to the hold | 0.135 | 0.171 |
+| Correlation with the hold | 0.65 | 0.76 |
+| Average gross exposure | 14.2% | 17.7% |
+| Alpha a year (its Sharpe) | 7.7% (0.59) | 4.4% (0.53) |
+| **Alpha PSR** | **0.884** | **0.812** |
+| **Year share (summed daily)** | **0.61 (2021)** | **0.894 (2024)** |
+| Average R per trade (win rate) | 1.31 (39%) | 0.67 (36%) |
+| Sub-trades a week; days with an order | 6.25; 64.0% | 6.74; 65.7% |
+| PBO (information) | 0.10 | 0.47 |
+| Coins positive; lookbacks positive | 5 of 5; 9 of 9 | 5 of 5; 9 of 9 |
+| Leading coins (share; coin's own price change) | SOL 31% (+3,016%), BNB 29% (+1,136%) | XRP 46.5% (+142%), BNB 25.5% (+147%) |
+
+**Fact.** CAGR, alpha and average R per trade roughly halved; the Sharpe ratio fell by about a third. The hold did
+much worse too (Sharpe 1.39 → 0.75). Both measures that failed in dev got worse. fast5 beat slow5 again (section
+8.5.6).
+
+**Interpretation.**
+
+- D1 did not break; it shrank.
+- Its Sharpe beat the hold's this time because the hold had a bad 2025–26, not because D1 got better.
+- The pattern is similar to dev: D1 earned most from coins with big, sustained rallies (SOL and BNB in dev, XRP and
+  BNB here), though not in strict order of their price gains (in dev, ETH rose more than BNB but gave less), and
+  little where coins only drifted (ETH and SOL here).
+
+#### 8.5.12 Compared with F1's 2024–2026 run (Deviation 1)
+
+**What F1's run was** (from `reports/results/F1.json` and its holdout files):
+
+- F1 is a 4-hour Donchian rule (n = 40, 3.5 × ATR stop, channel exit). It trades long **and** short, with risk-based
+  sizing.
+- Its holdout scope was the 4 alts (ETH, SOL, XRP, BNB) as equal-capital sleeves; the BTC sleeve was information
+  only.
+- Its window ran 2024-01-01 → 2026-10-13 (1,017 days), 13 days past D1's end.
+- It was a clean holdout, and it passed all 5 of its holdout gates. Official numbers: 4 alts +80.7%, Sharpe 0.82,
+  drawdown 27.6%; with BTC (5 coins) +70.2%, 0.76, 26.7%.
+
+**Like for like** (context check): both cut to 2026-09-30, the same coins and the same 1,004 days, with alpha
+measured against the hold of the same coins. F1's alpha numbers are the check's own calculation; F1.json does not
+store them.
+
+| | Total return | Sharpe | Volatility | Worst drawdown | Beta | Alpha PSR | Year share |
+|---|---|---|---|---|---|---|---|
+| F1, 4 alts | +78.7% | 0.82 | 32% | 27.6% | 0.02 | 0.907 | 0.63 |
+| D1, 4 alts (its 36 alt sub-sleeves) | +37.6% | 0.96 | 13% | 12.1% | 0.16 | 0.853 | 0.84 |
+| F1, 5 coins | +71.3% | 0.77 | | 26.7% | 0.01 | 0.898 | |
+| D1, 5 coins | +34.6% | 0.92 | 12.7% | 11.9% | 0.17 | 0.812 | 0.894 |
+
+- By year, F1 (4 alts): 2024 +50.0%, 2025 +7.8%, 2026 +10.5%. D1 (4 alts): +31.7%, +2.5%, +2.0%.
+- Correlation of D1 with F1 (5 coins): 0.35 on daily returns, 0.60 on weekly returns.
+- Sharpe from dev to 2024–2026: F1 4 alts 1.05 → 0.82; F1 5 coins 1.20 → 0.77; D1 1.35 → 0.92.
+- XRP gave 57% of F1's alt R and 66% of D1's alt R (60% of D1's 5-coin trade R).
+- F1's shorts made +6.6 R in 2026 (its longs +4.8 R); they lost money in 2024 and 2025. D1 cannot profit from falls.
+
+**Interpretation.**
+
+- F1 made about twice D1's return, with about 2.5× the volatility and 2.3× the drawdown. Per unit of risk the two
+  are similar, D1 slightly ahead.
+- D1 depends more on the market going up (beta 0.17 against about 0.01). That is why F1 scores better on alpha PSR
+  despite its lower Sharpe. Neither reaches 0.95.
+- Both relied on 2024 and on XRP: the same market episode. So they are not two independent confirmations.
+- F1's 2024–2026 result is clean evidence; D1's is contaminated. F1's counts for more.
+
+#### 8.5.13 What it means for the live paper test
+
+The forward test is unchanged: its rules, its 12/24-month verdict and its account construction stay as written
+(PREREGISTRATION.md:1049-1050). Nothing in the bot or the dashboard was changed by this run.
+
+**Facts** (the live-style account, which is how the paper book adds up; context check unless noted):
+
+- 2024–2026: +34.3%, worst end-of-day drawdown 12.5%, alpha PSR 0.760 (section 8.5.8). Dev: +137.3%, 28.6%, 0.747.
+- The pace matched dev: 6.7 sub-trades a week and orders on 66% of days, inside the dashboard's OK bands (2.0–12.0 a
+  week and 35%–90% of days; section 9.8).
+- Rolling windows over 2020-01-01 → 2026-09-30, live style, one window starting every day:
+
+| Window length | Windows | Alpha PSR ≥ 0.95 | Return > 0 | Drawdown ≤ 30% | All three | Median alpha PSR |
+|---|---|---|---|---|---|---|
+| 12 months | 2,101 | 0.05% (1 window, starting 2020-02-21) | 67% | 100% (worst 28.8%) | 0.05% | 0.56 (90th percentile 0.73) |
+| 24 months | 1,736 | 2.5% (all starting 2022-03-01 → 2022-04-13) | 92% | 100% | 2.5% | 0.68 |
+
+- Windows entirely inside 2024–2026: alpha PSR ≥ 0.95 in none; return > 0 in 65% (12 months) and 100% (24 months);
+  drawdown ≤ 30% in all (worst 12.9%).
+- Windows starting on the 1st of a month: 0 of 70 (12 months) and 2 of 58 (24 months) pass all three. The research
+  way of adding up gives the same first-of-month counts (0 of 70, 2 of 58); over all daily windows it passes 0.1%
+  (12 months) and 2.6% (24 months), against live style's 0.05% and 2.5%.
+- Calendar-year alpha PSR, live style: 0.76, 0.21, 0.23, 0.56, 0.61 and 0.39 for 2020–2025; 0.58 for October 2025 →
+  September 2026. Returns were negative in 2022, 2025 and October 2025 → September 2026.
+- A rough formula (assuming normal, independent daily returns): alpha PSR ≥ 0.95 needs an alpha Sharpe of about 1.65
+  over 12 months, or 1.16 over 24 months. With a true alpha Sharpe of 0.53–0.59 (the research-style values for
+  2024–2026 and dev), the chance of passing would be about 13–15% (12 months) and 19–21% (24 months); at the joined
+  2020–2026 live-style alpha Sharpe of 0.31, about 9% and 11% (the 2024–2026 live-style 0.43 gives about 11% and 15%);
+  with no alpha at all, 5%.
+- Limits of the rolling windows: they join the dev and 2024–2026 runs (one forced close and re-entry at
+  2024-01-01); windows starting before 2020-09-15 have no SOL; positions open at a window's start keep their earlier
+  sizes. The windows overlap heavily, so the percentages describe history, not probabilities.
+
+**Interpretation.**
+
+- The 30% drawdown limit will probably be met, unless a 2021-style boom and bust happens. The live-style dev
+  drawdown came within 1.4 points of 30%.
+- A positive return is likely over 24 months (92% of past windows) and less sure over 12 months (67%).
+- Alpha PSR is the binding condition, and it was almost never met. So "promising" is very unlikely: a few percent by
+  past windows, about 10–20% by the generous formula. It is most plausible if the test starts just before a sharp
+  fall that D1 sits out in cash, followed by a rally.
+- The likely outcome, "stays closed", will be weak evidence either way, as the pre-registration says (section 9.7).
+
+#### 8.5.14 Verdict
+
+**Facts, what held up:**
+
+- D1 stayed positive in 2024–2026: +34.6%. All 5 coins and all 9 lookbacks were positive (41 of 45 coin ×
+  lookback cells).
+- Its drawdown stayed small (11.9%, against the hold's 61.7%), and its costs were small.
+- Three of Deviation 2's four yardsticks are met: mean daily return > 0, Sharpe 0.92 ≥ 0.68, and a drawdown below
+  dev's 19%.
+- An independent re-simulation reproduced every trade and every daily return exactly.
+
+**Facts, what did not hold up or does not change:**
+
+- The two measures D1 failed on got worse: alpha PSR 0.884 → 0.812 (the dev bar was 0.95), year share 0.61 → 0.894
+  (the dev limit was 0.50).
+- Weekly t is 1.47, below the dev gate's 2.
+- The gain came from three months of 2024; D1 lost money in 21 of 33 months.
+- The data is contaminated: the long-only trend idea came partly from S1's and F1's earlier 2024–2026 runs on these
+  markets (PREREGISTRATION.md:1051-1052).
+- **Round 5's FAIL stands. This run cannot make D1 pass, and the forward test stays as registered** (PREREGISTRATION.md:1049-1050).
+
+**Interpretation:**
+
+- D1 is a low-exposure trend follower. Most of its small drawdown against the hold comes from its low average
+  exposure (about 17%). A fixed 17.1% of the account in the hold (D1's beta) fell almost as little (worst drawdown
+  13.7%; −13.6% over the hold's 61.7% fall, against D1's −11.0%) and did about the same in the 14 falling months
+  (average −1.90% a month, against D1's −1.85%). D1's lead over that fixed holding came from the 19 rising months
+  (+3.13% against +2.45% a month). It is not a proven edge. (From `D1_holdout_daily.parquet` and
+  `D1_holdout_bench.parquet`.)
+- Its 2024–2026 gain came essentially from three months of 2024, the November 2024 XRP rally above all. It was
+  flat for the 21 months after 2024.
+- It is about as risk-efficient as F1. A weekly correlation of 0.6 means it adds only some diversification.
+- The forward test will most likely end "stays closed". That would not prove D1 worthless.
+
+This is a research record, not financial advice.
 
 ---
 
@@ -1024,14 +1590,19 @@ Two practical consequences:
 
 | File | What it is |
 |---|---|
-| `research/PREREGISTRATION.md` | "## Round 5" (from line 358), "### D1" (429), "### Round 5 outcome and post-run notes" (567), "## D1 shadow paper book" (977). |
+| `research/PREREGISTRATION.md` | "## Round 5" (from line 358), "### D1" (429), "### Round 5 outcome and post-run notes" (567), "## D1 shadow paper book" (977), "## Deviation 2: D1 on 2024-2026" (1020). |
 | `research/round5/power_table.csv` | Power table (section 5.8). |
 | `research/round5/data_report_spot.csv` | Spot warm-up data report, 0 red flags. |
-| `research/round5/runs.jsonl` | Log of the spot download and the dev sweep, with git hash and clean flag. |
-| `research/trials.csv` | Trial registry; D1 rows at lines 377-379. |
-| `research/neff_history.jsonl` | N_eff by registry size. |
-| `research/holdout_log.jsonl` | Holdout unlocks; no Round 5 entry. |
-| `reports/results/D1.json` | All D1 dev results, gates and verdict. |
+| `research/round5/runs.jsonl` | Log of the spot download (line 1), the dev sweep (line 2) and the `r5-d1-info` run (line 3), with git hash and clean flag. |
+| `research/trials.csv` | Trial registry; D1 rows at lines 377-379. Unchanged by Deviation 2. |
+| `research/neff_history.jsonl` | N_eff by registry size. Unchanged by Deviation 2. |
+| `research/holdout_log.jsonl` | Holdout unlocks. Lines 1-3 are from earlier rounds. Line 4 is D1's Deviation 2 unlock (2026-10-18 13:48:51 UTC, tag `[R5 D1-info:`). Lines 5-6 are the two independent checks (`[R5 D1-info verify resim]`, `[R5 D1-info verify context]`). There is no XS unlock. |
+| `reports/results/D1.json` | All D1 dev results, gates and verdict. Since Deviation 2 also the key `holdout` (the 2024–2026 information run: summary, weekly, year_share, coin_contrib, coins_positive, alpha_vs_ew, activity, exposure, config_totals, pbo, plateau, mismatches, floors, stress_2x_mean_daily, runtime_s), plus `holdout_status` and `holdout_window`. |
+| `reports/results/D1_holdout_daily.parquet` | 2024–2026 account daily returns, 1,004 days (column `ret`). |
+| `reports/results/D1_holdout_equity.parquet` | 2024–2026 account equity from \$10,000 (column `equity`). |
+| `reports/results/D1_holdout_trades.parquet` | The 967 sub-trades of 2024–2026 (26 of them "end" exits at 2026-09-30 23:59). |
+| `reports/results/D1_holdout_sleeves.parquet` | Daily returns of each of the 45 sub-sleeves, 2024–2026 (columns `SYMBOL\|L`, for example `XRPUSDT\|20`). |
+| `reports/results/D1_holdout_bench.parquet` | The equal-weight daily-rebalanced hold, 2024–2026 (column `ret`), Round 5's benchmark. |
 | `reports/results/D1_configs.csv` | Summary row for the primary config (all9) only. |
 | `reports/results/D1_dev_daily.parquet` | Account daily returns, 1,461 days (column `ret`). |
 | `reports/results/D1_dev_equity.parquet` | Account equity, 1,461 days. |
@@ -1041,14 +1612,23 @@ Two practical consequences:
 | `reports/summary.html` | Generated HTML report (git-ignored), with a Round 5 section. |
 | `state/replay_d1/bot.sqlite`, `bot.log` | Local replay of section 9.5 (git-ignored). |
 
+The 2024–2026 files were written by `python -m btcq.research.run r5-d1-info --unlock-holdout`
+(`round5.cmd_d1_info`, commit `5dd793a`).
+
+> **Do not run `r5-d1-info` again.** It was Deviation 2's one-shot run, and it refuses to run a second time. Its
+> preflight (`round5.preflight_d1_info`) stops with "holdout stays locked: …" if D1.json already has a `holdout`
+> key, if `holdout_log.jsonl` already contains the `[R5 D1-info:` tag, if Deviation 2 is not committed, or if the
+> local data does not reach 2026-09-30. It never evaluates XS. To check the numbers, read the saved files above.
+> They hold almost everything; section 8.5.10 lists the three values that exist only in D1.json.
+
 ### 10.3 This folder: `research/D1/`
 
 | File | What it is |
 |---|---|
 | `README.md` | This document. |
-| `results/D1.json` | Byte-identical copy of `reports/results/D1.json`. |
+| `results/D1.json` | Byte-identical copy of `reports/results/D1.json`, refreshed after the Deviation 2 run: dev results plus the `holdout` key. |
 | `results/D1_configs.csv` | Byte-identical copy of `reports/results/D1_configs.csv`. |
-| `results/headline_metrics.csv` | Every D1.json value, flattened to key/value rows. |
+| `results/headline_metrics.csv` | Every dev D1.json value, flattened to key/value rows (made before the `holdout` key existed). |
 | `results/gates.csv` | The 8 gates: value, threshold, pass, D1.json key. |
 | `results/yearly.csv` | Yearly D1 vs hold (section 6.3). |
 | `results/by_coin.csv` | Per-coin table (section 6.4). |
@@ -1058,12 +1638,26 @@ Two practical consequences:
 | `results/monthly_equity.csv` | Month-end D1 and hold index, monthly returns, D1 drawdowns. |
 | `results/trade_stats.csv` | Trade statistics, costs and activity (sections 6.6–6.8). |
 | `results/null_and_bootstrap.csv` | Shift-null, PBO and bootstrap distributions (section 6.9). |
-| `results/chart_points.csv` | The numbers behind the Mermaid charts: yearly value of 100 (from `yearly.csv`) and quarter-end index (from `monthly_equity.csv`). |
+| `results/chart_points.csv` | The numbers behind the dev Mermaid charts (section 6.3): yearly value of 100 (from `yearly.csv`) and quarter-end index (from `monthly_equity.csv`). |
+| `results/holdout_headline.csv` | 2024–2026 (section 8.5): every headline number for D1, the hold, the live-style account and the configs, with its source file, the matching D1.json key and the difference. |
+| `results/holdout_yearly.csv` | 2024, 2025, 2026 to 30 Sep and the whole window: D1, hold and live-style returns, Sharpe and drawdowns, year shares, trades entered, open sub-positions (section 8.5.4). |
+| `results/holdout_by_coin.csv` | Per-coin table for 2024–2026 (section 8.5.5). It has no coin price change: that needs raw data. |
+| `results/holdout_by_lookback.csv` | Per-lookback table for 2024–2026 (section 8.5.6). |
+| `results/holdout_trade_stats.csv` | 2024–2026 trade statistics, costs and activity (section 8.5.7). |
+| `results/holdout_monthly_equity.csv` | Month-end D1, hold and live-style index for 2024–2026, monthly returns and drawdowns (the chart in section 8.5.4 samples it). |
+| `results/holdout_yardsticks.csv` | Deviation 2's four reference yardsticks, for the research and live-style accounts (section 8.5.9). |
 
-The derived tables were made with throwaway scripts that re-ran D1 on **dev data only** (the scripts asserted that no
+The dev tables were made with throwaway scripts that re-ran D1 on **dev data only** (the scripts asserted that no
 data at or after 2024-01-01 was loaded) and checked 100 numbers against the saved results. The scripts are not kept in
 the repository. The live-style aggregation numbers in section 9.3 and the worked example in section 3.4 come from the
 same kind of throwaway scripts.
+
+The `holdout_*.csv` tables were made by a throwaway script from the saved Deviation 2 files
+(`reports/results/D1.json` and `D1_holdout_*.parquet`), **without loading raw 2024+ data**. All 123 of its checks
+against D1.json and the dev records matched (largest difference 2e-14). For the dev live-style comparison it re-ran
+the dev sub-sleeves on dev data only. Three values need raw 2024+ data and are copied from D1.json: the 2× cost mean
+daily return, the mismatch count and the exposure tracking ratio. The re-simulation and context checks of section
+8.5.10 kept their scripts outside the repository too.
 
 ### 10.4 Commands
 
@@ -1086,13 +1680,18 @@ PYTHONPATH=src .venv/Scripts/python.exe -m btcq.research.run r5-power          #
 PYTHONPATH=src .venv/Scripts/python.exe -m btcq.research.run r5-download-spot  # builds spot warm-up data, rewrites the data report, logs to runs.jsonl
 PYTHONPATH=src .venv/Scripts/python.exe -m btcq.research.run r5-sweep          # the dev sweep: refuses now, because D1.json exists
 PYTHONPATH=src .venv/Scripts/python.exe -m btcq.research.run report            # rebuilds reports/summary.html
+# Deviation 2's one-shot 2024-2026 information run (r5-d1-info --unlock-holdout) was made once on 2026-10-18.
+# Do not run it again: it refuses (section 10.2).
 ```
 
 - `r5-sweep` runs **once per strategy version**. `r5-sweep --rerun` is accepted only after a version bump, and it adds
   new trials to the registry and moves N_eff. Do not use it just to check numbers.
 - `r5-download-spot` downloads from Binance's data archive. It is not needed again.
 - **Never run `r5-validate --unlock-holdout`.** It is the one-shot holdout unlock, allowed only if XS had passed. XS
-  failed, and the 2024–2026 holdout must stay locked. Do not load any data with `period='full'`.
+  failed, and XS's 2024–2026 holdout must stay locked and clean. Do not load any data with `period='full'`. (Round
+  5's only 2024+ loads are the three Deviation 2 lines of `holdout_log.jsonl`, lines 4-6; see section 8.5.1.)
+- **Never run `r5-d1-info` again.** D1's information run on 2024–2026 was made once under Deviation 2; the command
+  refuses a second run.
 
 **Read-only check of the dev result** (no writes, dev data only; needs the local archive under `data/`). Save as a
 scratch file outside the repository and run it with `cd F:/trade2 && PYTHONPATH=src .venv/Scripts/python.exe <file>`:
@@ -1123,8 +1722,8 @@ PYTHONPATH=src .venv/Scripts/python.exe -m btcq.live dashboard --db state/replay
 - The replay **deletes any existing `bot.sqlite` in its state folder** before it starts. Use a new folder, as above,
   to keep the earlier replay in `state/replay_d1`.
 - D1 runs in the replay only if all five coins are in the bot's `SYMBOLS` setting.
-- Keep `--end` on or before 2023-12-31 and never pass `--unlock-holdout`: a later end date reaches into the locked
-  2024+ holdout.
+- Keep `--end` on or before 2023-12-31 and never pass `--unlock-holdout`: a later end date reaches into the 2024+
+  holdout, which stays locked (XS has never been evaluated on it; section 8.5.2).
 
 ---
 
@@ -1144,16 +1743,20 @@ PYTHONPATH=src .venv/Scripts/python.exe -m btcq.live dashboard --db state/replay
 | Contribution | A coin's (or lookback's) part of the account's summed daily returns. |
 | CSCV | Combinatorially symmetric cross-validation: splits the history into 16 blocks and tries all 12,870 ways to use half for choosing and half for checking. Used to compute PBO. |
 | Dev period | The data used for development and testing: here 2020-01-01 → 2023-12-31. |
+| Deviation (protocol deviation) | A step outside the pre-registered rules, approved by the owner and written down before it is carried out. Deviation 1 was F1's 2024–2026 run (its text says it was recorded before the evaluation, but git first has it in the repository's first commit, `7ce3d7b`, about 1 h 45 min after F1's unlock); Deviation 2 is D1's 2024–2026 information run, committed before its unlock (section 8.5). |
 | Donchian channel | The highest and lowest close over the last L days. A breakout above the top is a trend signal. |
 | Drawdown | The fall from the highest equity so far to a later low, in %. Max drawdown is the worst one. "End of day" means measured on daily closing equity only. |
 | DSR (Deflated Sharpe Ratio) | Like PSR, but compares the Sharpe with what the best of N no-edge strategies would show by luck. It corrects for having tried many strategies. |
+| "End" exit | A position still open on the last day of a test window. The engine closes it at the last minute's close, minus slippage, and charges the taker fee. |
 | Equal-weight hold | The benchmark: equal amounts of the perps listed that day, rebalanced back to equal every daily close, no funding. In the research, XRP joins on 2020-01-06, BNB on 2020-02-10 and SOL on 2020-09-14 (each with its first return the next day); in the live test all 5 are listed. |
 | Forward test | Running a fixed rule on new data, from now on, to see how it behaves out of sample. |
 | Funding | A payment between long and short holders of a perp, every 8 hours on Binance (00:00, 08:00, 16:00 UTC). When the rate is positive, longs pay shorts. |
 | Gate | A pass/fail check fixed in advance. All gates must pass. |
 | Gross exposure | Total value of open positions divided by account equity. |
-| Holdout | Data kept locked and unused until the end, for a one-shot final check. Here 2024-01-01 → 2026-09-30. |
+| Holdout | Data kept locked and unused until the end, for a one-shot final check. Here 2024-01-01 → 2026-09-30. Round 5's rules never unlocked it; D1's part was opened once, as information only, under Deviation 2; XS's stays locked. |
+| Information only | A result that is reported in full but can't pass or fail anything and changes no decision. |
 | Kill switch | An automatic pause after a big drawdown (35% for F1). D1 has none. |
+| Live-style account | D1's 45 sub-sleeves added up the way the paper book does it: each starts with 1/45 of the money and keeps its own cash, with no rebalancing, so winners grow and losers shrink. |
 | Long only | Only buys; never bets on a fall. |
 | Lookback (L) | How many past days a rule looks at. |
 | Maker / taker | A maker order rests in the order book; a taker order trades at once against it. Takers pay higher fees (5 bp here). |
@@ -1187,3 +1790,4 @@ PYTHONPATH=src .venv/Scripts/python.exe -m btcq.live dashboard --db state/replay
 | Volatility (σ) | How much returns swing, here the standard deviation of daily log returns × √365. |
 | Volatility targeting | Sizing a position so that its expected swing is a fixed amount (25% a year here). |
 | Win rate | Share of trades with a profit. |
+| Yardstick | A reference value to compare a result with. Unlike a gate, missing it decides nothing. |

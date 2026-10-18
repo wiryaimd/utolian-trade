@@ -1051,3 +1051,24 @@ anyway, as the most relevant years, accepting that this is outside the registere
 - The data is not clean for this idea. The long-only trend idea came partly from S1's and F1's earlier 2024-2026 runs
   on these markets, and the period's general market history is known. The result is information only.
 - Whatever it shows, it is reported in full in the Round 5 records and in `research/D1/README.md`.
+
+### Deviation 2 outcome (2026-10-18, information only)
+
+The run followed the text above: commit `5dd793a` came before the single `[R5 D1-info:` unlock, XS was not evaluated,
+and the trial registry and N_eff are unchanged. Two independent checks loaded the window, each logged with the
+`[R5 D1-info verify` tag. An independent re-simulation, using none of the project's backtest code, reproduced all 967
+trades and every daily return exactly.
+
+D1 on 2024-01-01 → 2026-09-30, after costs and funding:
+- +34.6% (CAGR 11.4%), Sharpe 0.92, worst end-of-day drawdown 11.9%, weekly t 1.47;
+- beta 0.17 and alpha PSR 0.812 against the equal-weight hold, which made +106.2% (Sharpe 0.75, worst drawdown
+  61.7%);
+- year share 0.894 (2024): 2024 +31.3%, 2025 +0.4%, 2026 to 30 September +2.1%;
+- all 5 coins and all 9 lookbacks positive; XRP gave 46% of the result;
+- the live-style account (each sub-sleeve keeps its own cash) made +34.3%, with a 12.5% worst drawdown.
+
+Reference yardsticks: mean daily return > 0, met. Sharpe ≥ 0.68, met. Worst drawdown under dev's 19%, met. Alpha
+PSR ≥ 0.95, not met. Both measures D1 failed in dev got worse: year share 0.61 → 0.89 and alpha PSR 0.884 → 0.812.
+
+Consequences, as fixed above: Round 5's FAIL stands, and the forward test continues unchanged. Full tables are in
+`research/D1/README.md` section 8.5 and `research/D1/results/holdout_*.csv`.

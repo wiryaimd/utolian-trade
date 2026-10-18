@@ -1,0 +1,59 @@
+metric,value,note
+trades,967.0,"completed sub-sleeve trades, 2024-01-01..2026-09-30 (holdout.summary.trades)"
+wins (R>0),351.0,
+losses (R<=0),616.0,
+win_rate,0.36297828335056875,
+avg_R,0.6672578716322446,
+median_R,-0.5511696163265661,
+avg_win_R,3.904018224164438,
+avg_loss_R,-1.177064991580093,
+t_stat_R,3.0512136028247268,"trade-level, optimistic: trades overlap"
+profit_factor_R,1.889895528841477,
+total_R,645.2383618683805,
+avg_hold_days,16.31433701022636,avg_hold_h / 24
+median_hold_days,6.0,
+max_hold_days,435.0,
+min_hold_days,1.0,
+best_trade_by_R,143.38226254047834,"XRPUSDT L=5 2024-11-06 -> 2024-11-27 (21 d), R=143.38, account ret=1.9331%"
+worst_trade_by_R,-19.00715251425463,"ETHUSDT L=20 2024-01-01 -> 2024-01-04 (3 d), R=-19.01, account ret=-0.0425%"
+best_trade_by_account_return,0.03436506544070658,"XRPUSDT L=20 2024-11-08 -> 2024-12-20 (42 d), R=60.91, account ret=3.4365%"
+worst_trade_by_account_return,-0.003240780466620013,"XRPUSDT L=360 2025-07-18 -> 2025-11-14 (119 d), R=-0.82, account ret=-0.3241%"
+longest_winning_streak_exit_order,14.0,
+longest_losing_streak_exit_order,37.0,
+fees_total_acct_units,0.009686099759980511,sum(fees/eq_before)/45: fee drag in account-return units
+funding_total_acct_units,0.045826764140032554,sum(funding/eq_before)/45 (positive = paid)
+gross_total_acct_units,0.4112301167829779,sum(gross/eq_before)/45 (slippage inside fills)
+net_total_acct_units,0.35571725288296474,sum(trade ret) = gross - fees - funding
+fees_total_pct_of_initial_capital_dollars,0.011504033760716516,sum(fees $)/45/10000
+funding_total_pct_of_initial_capital_dollars,0.04869573234780463,sum(funding $)/45/10000
+gross_total_pct_of_initial_capital_dollars,0.4036206625803278,sum(gross $)/45/10000
+slippage_est_total_acct_units,0.003029499348807543,estimate: sum(qty*(entry_px+exit_px)*slip/eq_before)/45
+funding_to_fees_ratio_acct_units,4.731188535696515,
+fees_R_mean,0.03342111341472384,holdout.summary.fees_R
+funding_R_mean,0.06672829005153848,holdout.summary.funding_R
+exit_reason_exit_signal,941.0,
+exit_reason_end,26.0,
+exit_reason_stop,0.0,sentinel stop must never fire
+state_synchronous_start_entries,26.0,"positions already long at the window start, entered at the first in-window execution 2024-01-01 00:01"
+trades_per_year,351.54880478087654,
+sub_trades_per_week,6.742031872509961,holdout.activity.sub_trades_per_week
+order_days_share,0.6573705179282868,days with >=1 sub-sleeve entry or exit (holdout.activity.order_days_share)
+netted_orders_per_day,1.3515936254980079,"unique (coin, day) with an entry or exit / 1004"
+netted_orders_per_day_excl_window_end,1.347609561752988,
+unnetted_sub_orders_per_day,1.9262948207171315,entries + exits / 1004
+fills_on_active_day_median,2.0,excl. forced window-end closes
+fills_on_active_day_p95,7.0,
+fills_on_active_day_max,26.0,2024-01-01
+avg_open_sub_positions,15.687250996015937,of 45; holdout.summary.exposure = 15.713 is the minute-based equivalent
+max_open_sub_positions,43.0,2024-03-12
+days_with_zero_open_positions_share,0.08665338645418327,
+avg_open_sub_positions_2024,20.907103825136613,
+avg_open_sub_positions_2025,15.515068493150684,
+avg_open_sub_positions_2026,8.91941391941392,
+mean_gross_exposure_account,0.1774098167375596,"holdout.exposure.mean_gross_exposure (D1.json, exact); price-free reconstruction gives 0.17724, bounds [0.17527, 0.17934]"
+max_gross_exposure_account_approx,0.5199425849746289,2024-12-07 (reconstruction)
+zero_return_days_share,0.06872509960159362,
+r_floors,0.0,holdout.floors
+state_mismatches,0.0,"holdout.mismatches (from D1.json, needs raw data)"
+stress_2x_mean_daily,0.00030519213448802415,"holdout.stress_2x_mean_daily (from D1.json, needs raw data)"
+cost_drag_fees_plus_slippage_summed_daily_from_2x_stress,0.01247975957932812,summed daily lost when fees and slippage are doubled
