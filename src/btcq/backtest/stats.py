@@ -324,3 +324,38 @@ def power_table_td(sharpes=(0.0, 0.25, 0.4, 0.5, 0.6, 0.75, 1.0), n_sims: int = 
                     "full_book_years_dev": float(w.sum() / 252),
                     "min_sharpe_dev": float(2 * np.sqrt(252 / w.sum()))})
     return out
+
+
+def power_table_practical(sharpes=(0.0, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0), n_sims: int = 40_000, dev_days: int = 1309,
+                          hold_days: int = 1004, n_effs=(1.0, 2.0, 3.0, 6.0), seed: int = 7,
+                          chunk: int = 4000) -> list[dict]:
+    """Practical-rulebook power under iid Gaussian daily returns (365-day years). For each family N_eff:
+    p_dev = P(dev mean > 0 and dev DSR >= 0.95 at N_eff, null variance 1/(T-1)); p_pass = P(dev and holdout
+    mean > 0 and holdout Sharpe >= 50% of dev). The random-timing null, the 2x-cost, year-share, plateau,
+    coin-breadth and drawdown gates are not modelled (each can only lower these numbers)."""
+    from scipy.stats import norm
+    rng = np.random.default_rng(seed)
+    T = dev_days + hold_days
+    v0 = null_sr_variance(dev_days)
+    out = []
+    for s_ann in sharpes:
+        mu = s_ann / np.sqrt(365) * 0.01
+        k = {n: [0, 0] for n in n_effs}
+        for start in range(0, n_sims, chunk):
+            m = min(chunk, n_sims - start)
+            r = rng.normal(mu, 0.01, size=(m, T))
+            d, h = r[:, :dev_days], r[:, dev_days:]
+            sr_d = d.mean(1) / d.std(1, ddof=1)
+            sr_h = h.mean(1) / h.std(1, ddof=1)
+            hold = (h.mean(1) > 0) & (sr_h >= 0.5 * sr_d)
+            for n in n_effs:
+                star = expected_max_sr(v0, n)
+                z = (sr_d - star) * np.sqrt(dev_days - 1) / np.sqrt(1 + 0.5 * sr_d ** 2)
+                dev = (d.mean(1) > 0) & (norm.cdf(z) >= 0.95)
+                k[n][0] += int(dev.sum())
+                k[n][1] += int((dev & hold).sum())
+        for n in n_effs:
+            out.append({"sharpe_ann": s_ann, "n_eff": n, "sharpe_needed_ann":
+                        float((expected_max_sr(v0, n) + norm.ppf(0.95) / np.sqrt(dev_days - 1)) * np.sqrt(365)),
+                        "p_dev": k[n][0] / n_sims, "p_pass": k[n][1] / n_sims})
+    return out

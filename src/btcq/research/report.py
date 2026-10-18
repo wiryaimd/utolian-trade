@@ -270,15 +270,16 @@ def build() -> str:
     res4 = [r for r in (_load(c) for c in R4_CODES) if r is not None]
     res5 = [r for r in (_load(c) for c in R5_CODES) if r is not None]
     res6 = [r for r in (_load(c) for c in R6_CODES) if r is not None]
+    res7 = [r for r in (_r7_load(c) for c in R7_CODES) if r is not None]
     for r in res + res3:
         (TEAR / f"{r['code']}.html").write_text(_tearsheet(r), encoding="utf-8")
     for r in res4:
         (TEAR / f"{r['code']}.html").write_text(_r4_tearsheet(r), encoding="utf-8")
-    (REPORTS_DIR / "summary.html").write_text(_summary(res, res3, res4, res5, res6), encoding="utf-8")
+    (REPORTS_DIR / "summary.html").write_text(_summary(res, res3, res4, res5, res6, res7), encoding="utf-8")
     return str(REPORTS_DIR / "summary.html")
 
 
-def _summary(res, res3=(), res4=(), res5=(), res6=()) -> str:
+def _summary(res, res3=(), res4=(), res5=(), res6=(), res7=()) -> str:
     charts = {}
     c = Costs()
     by = {r["code"]: r for r in res}
@@ -295,7 +296,8 @@ def _summary(res, res3=(), res4=(), res5=(), res6=()) -> str:
     dirty = [r for r in res if "holdout" in r and r.get("holdout_status") == "contaminated"]
 
     # ---- verdict
-    v = _r6_verdict(res6) if res6 else []
+    v = _r7_verdict(res7) if res7 else []
+    v += _r6_verdict(res6) if res6 else []
     v += _r5_verdict(res5) if res5 else []
     v += _r4_verdict(res4) if res4 else []
     v += _r3_verdict(res3) if res3 else []
@@ -338,15 +340,16 @@ def _summary(res, res3=(), res4=(), res5=(), res6=()) -> str:
         f"capped at {Risk().max_leverage:.0f}×.</p>",
         f'<div class="callout">{"".join(v)}</div>',
         '<div class="tiles">'
-        f'<div class="tile"><div class="label">Strategies tested</div><div class="value">{len(res) + len(res3) + len(res4) + len(res5) + len(res6)}</div>'
+        f'<div class="tile"><div class="label">Strategies tested</div><div class="value">{len(res) + len(res3) + len(res4) + len(res5) + len(res6) + len(res7)}</div>'
         f'<div class="note">rounds 1–2: {len(res)}, round 3: {len(res3)}, round 4: {len(res4)}, round 5: {len(res5)}, '
-        f'round 6: {len(res6)}</div></div>'
+        f'round 6: {len(res6)}, round 7: {len(res7)}</div></div>'
         f'<div class="tile"><div class="label">Configurations backtested</div><div class="value">{n_trials}</div>'
         f'<div class="note">effective N {n_eff:.1f} (ratcheted)</div></div>'
         f'<div class="tile"><div class="label">Passed dev gates</div><div class="value">{len(finalists) + len(f3)}</div>'
         f'<div class="note">{", ".join(r["code"] for r in finalists + f3) or "none"}</div></div>'
         f'<div class="tile"><div class="label">Passed a clean holdout</div><div class="value">{len(passed) + len(p3)}</div>'
         f'<div class="note">{len(clean) + len(h3)} clean holdout tests run</div></div></div>',
+        *(_r7_section(res7, charts) if res7 else []),
         *(_r6_section(res6, charts) if res6 else []),
         *(_r5_section(res5, charts) if res5 else []),
         *(_r4_section(res4, charts) if res4 else []),
@@ -949,6 +952,70 @@ def _r6_section(res6, charts) -> list[str]:
         out.append(_table(["Market", "Dev contribution"], [[html.escape(k), _fmt(v, "pct")] for k, v in mc.items()]))
         cid = f"r6_{r['code']}"
         charts[cid] = _equity_spec(r, dev_end="2015", hold_label="Holdout (2016–)")
+        charts[cid]["layout"]["margin"] = {"l": 48, "r": 12, "t": 30, "b": 30}
+        out.append(f'<div class="card"><h3 style="margin-top:0">{r["code"]} · {html.escape(r["name"])}</h3>'
+                   f'<div id="{cid}" class="chart sm"></div></div>')
+    return out
+
+
+# ---------------------------------------------------------------- round 7
+
+R7_CODES = ["RT"]
+
+
+def _r7_load(code: str):
+    p = RESULTS / f"{code}.json"
+    if not p.exists():
+        return None
+    r = json.loads(p.read_text())
+    dp = RESULTS / f"{code}_dev_equity.parquet"
+    if not dp.exists():           # the verdict is saved before the result files: show nothing half-written
+        return None
+    r["_eq_dev"] = pd.read_parquet(dp)["equity"]
+    hp = RESULTS / f"{code}_holdout_equity.parquet"
+    r["_eq_hold"] = pd.read_parquet(hp)["equity"] if hp.exists() and "holdout_gates" in r else None
+    return r
+
+
+def _r7_word(r) -> str:
+    if r.get("headline"):
+        return "PASSES IN PRACTICE" if r["headline"]["PASSES_IN_PRACTICE"] else "holdout failed"
+    return "dev passed, holdout pending" if r.get("dev_pass") else "failed dev"
+
+
+def _r7_verdict(res7) -> list[str]:
+    parts = []
+    for r in res7:
+        d, dd = r["dev"], r["dev_detail"]
+        failed = [k for k, x in r["gates"].items() if not x] + [k for k, x in r.get("holdout_gates", {}).items() if not x]
+        parts.append(f"{r['code']} ({html.escape(r['name'])}): {_r7_word(r)}; dev Sharpe {d.get('sharpe', 0):.2f}, "
+                     f"null p {dd['null']['p_value']:.3f}, DSR {r['dsr_family']['dsr']:.3f} at N_eff "
+                     f"{r['n_eff_family']:.2f}" + (f"; failed {', '.join(html.escape(f) for f in failed)}" if failed else ""))
+    return ["<p><b>Round 7 (daily top-3 rotation, non-major perps, practical rulebook):</b> " + "; ".join(parts) + ".</p>"]
+
+
+def _r7_section(res7, charts) -> list[str]:
+    out = ["<h2>Round 7: daily top-3 rotation among non-major perps</h2>",
+           "<p class='small muted'>RT holds the 3 strongest of the month's ~15 most liquid non-major perps by their "
+           "14-day return (only coins with a positive return; cash otherwise), keeps a coin while it ranks in the top "
+           "6, and resizes every holding to 1/3 of the equity at each 00:01 UTC fill. Taker fee plus 2–5 bp slippage on "
+           "every change, real funding, Round 4's delisting rule. Dev 2020-06 → 2023-12; one-shot clean holdout "
+           "2024-01 → 2026-09. Judged under the practical rulebook (research/PREREGISTRATION.md, Round 7).</p>"]
+    for r in res7:
+        rows = []
+        for name, d in (("Dev", r["dev"]), ("Holdout", (r.get("holdout") or {}).get("summary"))):
+            if not d:
+                continue
+            rows.append([name, _fmt(d.get("trades"), "int"), _fmt(d.get("total_return"), "pct"), _fmt(d.get("cagr"), "pct"),
+                         _fmt(d.get("sharpe")), _fmt(d.get("max_dd"), "pct"), _fmt(d.get("turnover_per_year"), "f1"),
+                         _fmt(d.get("share_days_with_order"), "pct0"), _fmt(d.get("share_days_invested"), "pct0")])
+        out.append(_table(["Window", "Trades", "Total", "CAGR", "Sharpe", "Worst drop", "Turnover/yr", "Days with orders",
+                           "Days invested"], rows))
+        out += [f"<h3>{r['code']} gates: {_r7_word(r)}</h3>",
+                _table(["Gate", "Result"], [[html.escape(k), _mark(v)] for k, v in
+                                            list(r["gates"].items()) + list(r.get("holdout_gates", {}).items())])]
+        cid = f"r7_{r['code']}"
+        charts[cid] = _equity_spec(r)
         charts[cid]["layout"]["margin"] = {"l": 48, "r": 12, "t": 30, "b": 30}
         out.append(f'<div class="card"><h3 style="margin-top:0">{r["code"]} · {html.escape(r["name"])}</h3>'
                    f'<div id="{cid}" class="chart sm"></div></div>')

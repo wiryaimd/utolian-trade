@@ -21,12 +21,13 @@ _HOLDOUT_UNLOCKED = False
 HOLDOUT_LOG = RESEARCH_DIR / "holdout_log.jsonl"
 
 
-def unlock_holdout(reason: str) -> None:
-    """Allow loading data on/after HOLDOUT_START. Every unlock is appended to the log."""
+def unlock_holdout(reason: str, **fields) -> None:
+    """Allow loading data on/after HOLDOUT_START. Every unlock is appended to the log, with any structured
+    fields (e.g. round, kind, version) next to the reason."""
     global _HOLDOUT_UNLOCKED
     HOLDOUT_LOG.parent.mkdir(parents=True, exist_ok=True)
     with HOLDOUT_LOG.open("a") as f:
-        f.write(json.dumps({"utc": datetime.now(timezone.utc).isoformat(), "reason": reason}) + "\n")
+        f.write(json.dumps({"utc": datetime.now(timezone.utc).isoformat(), **fields, "reason": reason}) + "\n")
     _HOLDOUT_UNLOCKED = True
 
 
@@ -125,10 +126,11 @@ def _patch_holes(perp: pd.DataFrame, dl, report: dict) -> pd.DataFrame:
     return perp
 
 
-def build_perp_only(symbol: str, keep_raw: bool = False) -> dict:
+def build_perp_only(symbol: str, keep_raw: bool = False, returns_before_ms: int | None = None) -> dict:
     """Perp 1m + 4h + funding for any USD-M symbol, tolerating datasets the archive lacks
     (new listings, delisted contracts). Writes build_report.json with data-quality checks.
-    Unless keep_raw, the raw kline zips are deleted after the parquet is read back and verified."""
+    Unless keep_raw, the raw kline zips are deleted after the parquet is read back and verified.
+    returns_before_ms: count extreme bars only on rows before it (a blind build of holdout data)."""
     out_dir = symbol_dir(symbol)
     out_dir.mkdir(parents=True, exist_ok=True)
     report: dict = {"symbol": symbol, "status": "ok"}
@@ -156,7 +158,7 @@ def build_perp_only(symbol: str, keep_raw: bool = False) -> dict:
     gaps = gap_report(perp)
     gaps.to_csv(out_dir / "gaps_1m.csv", index=False)
 
-    report.update(_quality(perp, bars4, fund))
+    report.update(_quality(perp, bars4, fund, returns_before_ms))
     back = pd.read_parquet(_pq("perp_1m", symbol))
     verified = (len(back) == len(perp) and int(back["ts"].iloc[0]) == int(perp["ts"].iloc[0])
                 and int(back["ts"].iloc[-1]) == int(perp["ts"].iloc[-1]))
@@ -184,8 +186,10 @@ def _rmtree(path) -> None:
     shutil.rmtree(path)
 
 
-def _quality(perp: pd.DataFrame, bars4: pd.DataFrame | None, fund: pd.DataFrame) -> dict:
-    """Reported only; nothing is cleaned here."""
+def _quality(perp: pd.DataFrame, bars4: pd.DataFrame | None, fund: pd.DataFrame,
+             returns_before_ms: int | None = None) -> dict:
+    """Reported only; nothing is cleaned here. returns_before_ms: extreme bars (big moves) are counted only on
+    rows before it, so a blind build never summarises returns it must not see."""
     ts = perp["ts"].to_numpy(np.int64)
     o, h, l, c = (perp[k].to_numpy() for k in ("open", "high", "low", "close"))
     vol = perp["volume"].to_numpy()
@@ -193,6 +197,8 @@ def _quality(perp: pd.DataFrame, bars4: pd.DataFrame | None, fund: pd.DataFrame)
     live = np.flatnonzero(vol > 0)
     with np.errstate(divide="ignore", invalid="ignore"):
         extreme = (h / l - 1 > 0.5) | (np.abs(c / o - 1) > 0.3)
+    if returns_before_ms is not None:
+        extreme &= ts < returns_before_ms
     q = {"rows": len(perp), "first": _iso(ts[0]), "last": _iso(ts[-1]),
          "last_traded": _iso(ts[live[-1]]) if len(live) else None,
          "zero_volume_tail_min": int(len(ts) - 1 - live[-1]) if len(live) else len(ts),
@@ -202,6 +208,7 @@ def _quality(perp: pd.DataFrame, bars4: pd.DataFrame | None, fund: pd.DataFrame)
          "gaps_over_24h": int((d > TF_MS["1d"]).sum()),
          "max_gap_h": round(float(d.max()) / 3_600_000, 2) if len(d) else 0.0,
          "extreme_bars": int(extreme.sum()),
+         **({"extreme_bars_before": _iso(returns_before_ms)} if returns_before_ms is not None else {}),
          "funding_rows": len(fund)}
     if len(fund):
         f = fund["ts"].to_numpy(np.int64)
