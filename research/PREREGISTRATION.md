@@ -1122,3 +1122,51 @@ F2 failed Round 3's dev gates on DSR and plateau, so under the registered rules 
 
 `final_pass` is false, as fixed above. Funding data ends on 2026-09-30, so the last 13 days carry no funding, as in
 F1's run; the effect is about 0.3%. **Consequence:** F2 stays closed. It adds nothing next to F1.
+
+## Practical rulebook (owner decision, 2026-10-18; applies to research registered after this section)
+
+**Why.** Every strategy so far failed at least one strict gate. The strict gates were built for other people's money.
+They also treat the whole project's ~390 trials as one search, so every new idea pays for every old one. The owner
+trades his own $10,000 and chose looser, practical rules. They are written here before any test uses them.
+
+**Scope:**
+- The rulebook applies to every round or deviation registered after this section.
+- Past verdicts stay as recorded. Earlier results may be re-read under these rules as information only, with no
+  re-runs or tweaks to rescue them.
+- Registered forward tests keep their own written rules, including the D1 shadow book's 12/24-month verdict.
+
+**A strategy "passes in practice" when all of these hold:**
+1. **Dev gates (practical):**
+   - Enough data: at least 100 trades in dev (or the round's own higher minimum).
+   - Mean daily return (or average R) > 0 after doubled fees and slippage.
+   - It beats random timing: the round's null test at p < 0.05.
+   - DSR ≥ 0.95 within the family:
+     - N is the number of configs searched for this family's parameters, including any earlier grid that chose them
+       (F1's would be S1's 30), but not the project-wide ratchet;
+     - the variance is the null variance 1/(T−1) of the daily Sharpe;
+     - formula: PSR against the expected maximum Sharpe of N skill-less trials (`stats.expected_max_sr`).
+   - Best calendar year ≤ 65% of the summed daily returns.
+   - Where the round has a grid: PBO ≤ 0.5 and its neighbouring configs positive (plateau).
+   - Positive in most markets: at least 60%, or the round's own higher bar.
+2. **Clean out-of-sample confirmation (required).** It must stay positive on data never used for the idea, the choice
+   of markets, or the tuning, using one of:
+   - an untouched holdout: mean > 0, Sharpe ≥ 50% of dev, and worst drawdown within the dev bootstrap's 95th
+     percentile (or within 1.5× dev's worst drawdown where no bootstrap is defined);
+   - a forward paper period whose length is fixed before it starts: at least 6 months and 50 trades, with the same
+     three yardsticks.
+
+   A contaminated holdout does not count.
+3. **Reported, never gates:**
+   - the strict tier (DSR at the ratcheted project N_eff ≥ 0.95);
+   - alpha PSR against holding the same markets;
+   - correlation with F1;
+   - weekly t;
+   - year concentration.
+
+**What a pass means:** a candidate for paper trading, or for small real money at the owner's decision, starting at
+reduced risk. Real money is never automatic.
+
+**Still not allowed:**
+- changing rules or thresholds after seeing results;
+- choosing a config, market list or window from holdout results;
+- re-running a failed test with changes without registering it as a new trial.
