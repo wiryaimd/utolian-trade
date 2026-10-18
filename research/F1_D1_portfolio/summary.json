@@ -1,0 +1,91 @@
+{
+  "corr": {
+    "2020-2026": {
+      "daily": 0.439472384622584,
+      "weekly": 0.5780359991881129
+    },
+    "2020-2023": {
+      "daily": 0.47953873882040554,
+      "weekly": 0.5748721630702621
+    },
+    "2024-2026": {
+      "daily": 0.35355825830713933,
+      "weekly": 0.5998288815493695
+    }
+  },
+  "w_equal_risk_from_dev": 0.32145643125260304,
+  "vol_dev": {
+    "F1": 0.3624347839632002,
+    "D1": 0.1717015643220853
+  },
+  "activity": {
+    "F1": {
+      "share_days_with_order": 0.40649087221095337,
+      "fills_per_week": 5.966328600405679,
+      "netted_orders_per_week": 5.091683569979716,
+      "longest_days_without_order": 21,
+      "y2020": 0.35792349726775957,
+      "y2021": 0.4191780821917808,
+      "y2022": 0.410958904109589,
+      "y2023": 0.410958904109589,
+      "y2024": 0.42349726775956287,
+      "y2025": 0.43561643835616437,
+      "y2026": 0.38095238095238093
+    },
+    "D1": {
+      "share_days_with_order": 0.6466531440162272,
+      "fills_per_week": 12.673833671399594,
+      "netted_orders_per_week": 9.223529411764705,
+      "longest_days_without_order": 15,
+      "y2020": 0.5901639344262295,
+      "y2021": 0.6958904109589041,
+      "y2022": 0.5534246575342465,
+      "y2023": 0.7205479452054795,
+      "y2024": 0.7131147540983607,
+      "y2025": 0.6493150684931507,
+      "y2026": 0.5897435897435898
+    },
+    "F1+D1": {
+      "share_days_with_order": 0.7651115618661257,
+      "fills_per_week": 18.640162271805274,
+      "netted_orders_per_week": 12.42393509127789,
+      "longest_days_without_order": 13,
+      "y2020": 0.7076502732240437,
+      "y2021": 0.8054794520547945,
+      "y2022": 0.7150684931506849,
+      "y2023": 0.8054794520547945,
+      "y2024": 0.8224043715846995,
+      "y2025": 0.7863013698630137,
+      "y2026": 0.6959706959706959
+    }
+  },
+  "practical_reread": {
+    "F1": {
+      "dsr_family(N=30, S1 grid)": 0.6356144975545508,
+      "best_year_share": 0.33766855068179213,
+      "2x_cost": true,
+      "null p<0.05": true,
+      "trades": 600,
+      "markets_positive": 5,
+      "clean_oos": "holdout passed all 5 gates (Deviation 1, clean)",
+      "holdout_gates": {
+        "holdout trades>=30": true,
+        "holdout trades/yr>=52": true,
+        "holdout avg_R>0": true,
+        "holdout Sharpe>=50% dev": true,
+        "holdout MDD<=boot p95": true
+      }
+    },
+    "D1": {
+      "dsr_family(N=3)": 0.9672533603559177,
+      "best_year_share": 0.610024289778353,
+      "2x_cost": true,
+      "null p<0.05": true,
+      "trades": 1304,
+      "PBO": 0.10334110334110334,
+      "plateau": 1.0,
+      "coins_positive": 5,
+      "clean_oos": "none: its 2024-26 holdout is contaminated; needs a forward paper period"
+    }
+  }
+}
