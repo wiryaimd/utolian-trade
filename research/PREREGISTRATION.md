@@ -1170,3 +1170,32 @@ reduced risk. Real money is never automatic.
 - changing rules or thresholds after seeing results;
 - choosing a config, market list or window from holdout results;
 - re-running a failed test with changes without registering it as a new trial.
+
+### Practical rulebook, Amendment 1: N is the family's effective number of trials (owner decision, 2026-10-18)
+
+**Disclosure: this amendment was decided AFTER seeing a result it changes.** The F1 + D1 portfolio report
+(`research/F1_D1_portfolio/README.md`, commit `dcaf33e`) re-read F1 under the rulebook as first worded:
+- With N = 30 (S1's raw grid of configs), F1's within-family DSR is 0.64, a fail.
+- S1's 30 configs are so correlated that they behave like 1.71 independent trials. With N_eff = 1.71, the DSR is
+  0.99, a pass.
+
+After seeing both numbers, the owner chose the effective count. The reason given: it is the method the project has
+always used for N (the strict tier's N_eff), and the raw count treats near-identical configs as independent tries.
+The original wording above is kept unchanged so the change stays visible.
+
+**New rule, replacing "N is the number of configs searched" in the DSR gate:**
+- N is the family's effective number of independent trials, `stats.effective_trials`: the participation ratio of the
+  eigenvalues of the correlation matrix of the family's trial daily returns over the dev window.
+- The family is every config searched for its parameters, including any earlier grid that chose them. For F1 that is
+  S1's 30 configs, from `S1_trial_returns.parquet`.
+- When N_eff < 2 there is no deflation (`expected_max_sr` returns 0), so DSR = PSR(0).
+- The variance stays the null variance 1/(T−1).
+- Every round reports DSR at both the raw config count and N_eff. The gate uses N_eff.
+- Rounds must save their trial daily returns, as earlier rounds did, so N_eff can be computed.
+
+**Effect on the re-read (information only; past verdicts stay as recorded):** F1 now meets every practical rule:
+- dev: DSR 0.99, best year 34%, 2× costs, random-timing null p 0.003, 5 of 5 markets positive;
+- clean out-of-sample: its 2024-26 holdout passed all 5 gates.
+
+D1 meets the practical dev rules. Its 3 configs behave like 1.13 independent trials, so its DSR is 0.996 at N_eff
+(0.97 at the raw N = 3). It still has no clean out-of-sample result, so it needs a forward paper period. Neither re-read changes a recorded verdict, and real money stays the owner's decision.

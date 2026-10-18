@@ -51,9 +51,14 @@ Information only, from the saved and verified daily results of both strategies (
 | Best year ≤ 65% | 34% ✓ | 61% ✓ |
 | Markets positive | 5/5 ✓ | 5/5 ✓ |
 | PBO / plateau | (single config) | 0.10 / 1.0 ✓ |
-| **DSR within the family** | **0.64 at N = 30** (S1's raw grid, as the rulebook is worded); **0.99 at N = 1.7** (the grid's effective number of independent trials) | **0.97 at N = 3** ✓ |
+| **DSR within the family** | **0.99 at N_eff = 1.71** ✓ (S1's 30 configs; 0.64 at the raw N = 30) | **0.996 at N_eff = 1.13** ✓ (0.97 at the raw N = 3) |
 | Clean out-of-sample | ✓ (2024-26 holdout passed all 5 gates) | ✗ none yet (holdout contaminated); needs a forward paper period |
 
-S1's 30 configs are so correlated that they behave like 1.7 independent trials. The project's strict tier always
-used this effective count, but the rulebook's wording uses the raw count. Switching to the effective count would be
-an amendment decided after seeing this re-read, and it would have to be recorded as such.
+Under the rulebook as first worded (raw config count), F1's DSR was 0.64. After seeing that, the owner amended the
+rulebook to use the family's effective number of independent trials. That is the project's usual N_eff method, and
+S1's 30 near-identical configs count as 1.71 trials. The amendment is recorded in PREREGISTRATION.md as "Practical
+rulebook, Amendment 1", with this disclosure.
+
+Under the amended rulebook, F1 meets every practical rule, including clean out-of-sample confirmation. D1 meets the
+dev rules but still needs a forward paper period. Both re-reads are information only: no recorded verdict changes,
+and real money stays the owner's decision.
