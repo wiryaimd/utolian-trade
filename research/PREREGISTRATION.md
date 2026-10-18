@@ -1199,3 +1199,40 @@ The original wording above is kept unchanged so the change stays visible.
 
 D1 meets the practical dev rules. Its 3 configs behave like 1.13 independent trials, so its DSR is 0.996 at N_eff
 (0.97 at the raw N = 3). It still has no clean out-of-sample result, so it needs a forward paper period. Neither re-read changes a recorded verdict, and real money stays the owner's decision.
+
+## D1 practical checkpoint (owner decision, registered 2026-10-18 15:50 UTC, before any closed D1 trade)
+
+**Why.** Under the practical rulebook and its Amendment 1, D1 meets the dev rules but has no clean out-of-sample
+result: its 2024-26 holdout is contaminated (Deviation 2). The rulebook accepts a forward paper period fixed in
+advance as clean confirmation. D1's shadow paper run on the VPS is that period.
+
+**State when this was registered** (read-only from the VPS database):
+- D1 started on 2026-10-17 at 07:33 UTC, and its first orders filled on 2026-10-18 at 00:01 UTC;
+- 12 of 45 sub-positions open, paper equity $9,986.54 (−0.13%), 0 closed sub-trades.
+
+**When the check is made:**
+- Normally at the first daily close on or after 2027-04-18 00:00 UTC (6 months after the first fills).
+- If fewer than 50 D1 sub-trades have closed by then, the check moves to the daily close at which the 50th closes. It
+  never moves for any other reason.
+
+**What is measured:** the paper book's own end-of-day equity, from the bot database's `equity` table for book D1,
+from its first day to the check. This is the live-style account, in which each sub-sleeve keeps its own cash.
+
+**Yardsticks (all three must hold):**
+1. Total return over the period > 0 (mean daily return > 0).
+2. Annualised Sharpe of the daily returns (√365) ≥ 0.68, which is half of dev's 1.35.
+3. Worst end-of-day drawdown ≤ 28.5%, which is 1.5 × dev's worst drawdown of 18.98%.
+
+**Two choices fixed now:**
+- **Drawdown basis.** The rulebook prefers the dev bootstrap's 95th percentile where one is defined. D1's trade-sequence
+  bootstrap ignores that its trades overlap, so its drawdowns are far too small: p95 5.2% against a real 19% (D1
+  report §6.9). It is therefore not used, and the 1.5 × dev-worst rule applies.
+- **Which dev numbers.** The yardsticks use the research-style dev results (Sharpe 1.35, worst drawdown 19%). That is
+  stricter than comparing with dev's live-style results (Sharpe 1.12, worst drawdown 28.6%).
+
+**What the result means:**
+- **All three met:** D1 "passes in practice". It becomes a candidate for small real money at the owner's decision.
+  Running it next to F1 in one account would first need the live executor to net both books' positions.
+- **Any one missed:** no practical pass. The check is not repeated or moved, and D1 continues on paper.
+- **Either way,** the registered forward test is unchanged and reported separately: first look at 12 months, verdict at
+  24 (alpha PSR ≥ 0.95, total return > 0, end-of-day drawdown ≤ 30%).
