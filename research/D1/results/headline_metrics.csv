@@ -1,0 +1,94 @@
+key,value
+code,D1
+name,"Daily long-only Donchian ensemble, vol-targeted"
+tf,1d
+version,1
+round,5
+hypothesis,"Time-series momentum at 1-week to 1-year horizons on the 5 majors, expressed as a 9-lookback daily ensemble that adjusts exposure about once a day."
+rules,"Per market and lookback L in {5,10,20,30,60,90,150,250,360} days: long when the daily close exceeds the prior L-day high, out when it falls below the running max of the L-day midpoint; each sub-sleeve sized at entry to 25% annualised vol (cap 2x); long only."
+params.set,all9
+holdout_scope,information only (contaminated)
+start,2020-01-01
+end,2023-12-31
+dev_detail.summary.trades,1304
+dev_detail.summary.win_rate,0.39263803680981596
+dev_detail.summary.avg_R,1.3056076120914488
+dev_detail.summary.median_R,-0.5061999361653582
+dev_detail.summary.t_stat,6.85822328029571
+dev_detail.summary.pf,2.7399311970024165
+dev_detail.summary.total_R,1702.5123261672493
+dev_detail.summary.total_return,1.3876650038900857
+dev_detail.summary.cagr,0.24287848829501035
+dev_detail.summary.sharpe,1.3522725455349924
+dev_detail.summary.sortino,1.541650654426648
+dev_detail.summary.max_dd,0.1898429581511777
+dev_detail.summary.calmar,1.2793652746476847
+dev_detail.summary.dd_days,954
+dev_detail.summary.exposure,14.627626625598905
+dev_detail.summary.avg_hold_h,393.33059815950924
+dev_detail.summary.trades_per_year,325.77686516084873
+dev_detail.summary.long_n,1304
+dev_detail.summary.long_avg_R,1.3056076120914488
+dev_detail.summary.short_n,0
+dev_detail.summary.short_avg_R,0.0
+dev_detail.summary.fees_R,0.029854561800752175
+dev_detail.summary.funding_R,0.262749823564993
+dev_detail.summary.max_year_share,0.4267204648003215
+dev_detail.summary.years_positive,3
+dev_detail.summary.years,4
+dev_detail.weekly.t,2.4864061773275754
+dev_detail.weekly.n,209
+dev_detail.weekly.mean,0.0045055599634310954
+dev_detail.weekly.sd,0.026196896299341615
+dev_detail.weekly.sharpe_ann,1.2402253524389255
+dev_detail.stress_2x_mean_daily,0.000627054859336941
+dev_detail.year_share,0.610024289778353
+dev_detail.coin_contrib.BTCUSDT,0.14500279418464213
+dev_detail.coin_contrib.ETHUSDT,0.1732385892686497
+dev_detail.coin_contrib.SOLUSDT,0.28724838370656586
+dev_detail.coin_contrib.XRPUSDT,0.05546232329046874
+dev_detail.coin_contrib.BNBUSDT,0.2684332850027715
+dev_detail.coins_positive,5
+dev_detail.pbo,0.10334110334110334
+dev_detail.plateau,1.0
+dev_detail.config_totals.all9,1.3876650038900857
+dev_detail.config_totals.fast5,1.6155055514796142
+dev_detail.config_totals.slow5,1.2600804124177705
+dev_detail.alpha_vs_ew.beta,0.13499348956973092
+dev_detail.alpha_vs_ew.psr_alpha,0.8836031959784925
+dev_detail.alpha_vs_ew.sharpe_alpha_ann,0.588234621775825
+dev_detail.alpha_vs_ew.alpha_ann,0.07678469936172426
+dev_detail.alpha_vs_ew.days,1461
+dev_detail.floors,0
+dev_detail.mismatches,0
+dev_detail.exposure.mean_ratio,1.22657049962771
+dev_detail.exposure.p5_p50_p95[0],0.80093865967181
+dev_detail.exposure.p5_p50_p95[1],1.046930078675557
+dev_detail.exposure.p5_p50_p95[2],2.8581395304968353
+dev_detail.exposure.share_outside_0.5_2,0.0928462709284627
+dev_detail.exposure.mean_gross_exposure,0.1416900572256163
+dev_detail.activity.order_days_share,0.6399726214921286
+dev_detail.activity.sub_trades_per_week,6.247775496235455
+dev_detail.null.actual_mean_daily,0.000636129620433332
+dev_detail.null.null_mean,0.0002720393481552651
+dev_detail.null.null_p95,0.0005143489224856735
+dev_detail.null.p_value,0.008991008991008992
+dev_detail.runtime_s,963.4132564067841
+gates.weekly t>=2,True
+gates.2x-cost mean>0,True
+gates.year share<=50%,False
+gates.>=3/5 coins positive,True
+gates.shift null p<0.05,True
+gates.PBO<=0.5,True
+gates.plateau>=70%,True
+gates.alpha PSR vs EW hold>=0.95,False
+dev_pass,False
+dsr_dev.sharpe_ann,1.3522725455349904
+dsr_dev.T,1461
+dsr_dev.psr0,0.9964288712354294
+dsr_dev.dsr,0.8094289157586774
+dsr_dev.n,16.849570528171945
+dsr_dev.sharpe_needed_ann,0.9120304295395739
+n_dsr,16.849570528171945
+n_eff,14.849570528171945
+n_trials,384

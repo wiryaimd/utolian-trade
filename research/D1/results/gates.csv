@@ -1,0 +1,9 @@
+gate,value,threshold,pass,d1_json_key
+weekly t>=2,2.4864061773275754,>= 2.0,True,dev_detail.weekly.t
+2x-cost mean>0,0.000627054859336941,"> 0 (mean daily account return, fees and slippage x2, funding unchanged)",True,dev_detail.stress_2x_mean_daily
+year share<=50%,0.610024289778353,<= 0.50 (largest calendar year's share of summed daily returns),False,dev_detail.year_share
+>=3/5 coins positive,5.0,>= 3 of 5,True,dev_detail.coins_positive
+shift null p<0.05,0.008991008991008992,"< 0.05 (1000 common circular shifts, seed 55)",True,dev_detail.null.p_value
+PBO<=0.5,0.10334110334110334,"<= 0.50 (CSCV, S=16, 3 configs)",True,dev_detail.pbo
+plateau>=70%,1.0,>= 0.70 (share of the 2 neighbour configs with total return > 0),True,dev_detail.plateau
+alpha PSR vs EW hold>=0.95,0.8836031959784925,>= 0.95,False,dev_detail.alpha_vs_ew.psr_alpha

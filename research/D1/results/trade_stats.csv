@@ -1,0 +1,49 @@
+metric,value,note
+trades,1304.0,"completed sub-sleeve trades, dev 2020-01-01..2023-12-31 (dev.trades)"
+wins (R>0),512.0,
+losses (R<=0),792.0,
+win_rate,0.39263803680981596,dev.win_rate
+avg_R,1.3056076120914488,dev.avg_R
+median_R,-0.5061999361653582,dev.median_R
+avg_win_R,5.236340581247888,
+avg_loss_R,-1.235472287161199,
+t_stat_R,6.85822328029571,"dev.t_stat (trade-level, optimistic: trades overlap)"
+profit_factor_R,2.7399311970024165,dev.pf
+total_R,1702.5123261672493,dev.total_R
+avg_hold_days,16.388774923312884,dev.avg_hold_h / 24
+median_hold_days,6.5,
+max_hold_days,302.0,
+min_hold_days,1.0,
+best_trade_by_R,107.51670338141719,"BNBUSDT L=5 2021-01-29 -> 2021-02-16 (18 d), R=107.52, account ret=1.4218%"
+worst_trade_by_R,-23.796589740574763,"BTCUSDT L=5 2022-08-26 -> 2022-08-27 (1 d), R=-23.80, account ret=-0.0472%"
+best_trade_by_account_return,0.06072852352149944,"BNBUSDT L=250 2020-09-13 -> 2021-05-20 (249 d), R=25.55, account ret=6.0729%"
+worst_trade_by_account_return,-0.0029332762588246742,"XRPUSDT L=360 2020-11-22 -> 2020-12-24 (32 d), R=-1.31, account ret=-0.2933%"
+longest_winning_streak_exit_order,26.0,
+longest_losing_streak_exit_order,35.0,
+fees_total_pct_of_capital_return_units,0.010700732448403645,sum(fees/eq_before)/45: fee drag in account-return units
+funding_total_pct_of_capital_return_units,0.31154186135269213,sum(funding/eq_before)/45 (positive = paid)
+gross_total_pct_of_capital_return_units,1.4404736241916996,sum(gross/eq_before)/45
+net_total_pct_of_capital_return_units,1.1182310303906036,sum(trade ret) = gross - fees - funding
+fees_total_pct_of_initial_capital_dollars,0.017465881100972816,sum(fees $)/45/10000
+funding_total_pct_of_initial_capital_dollars,0.33829363355275666,sum(funding $)/45/10000
+gross_total_pct_of_initial_capital_dollars,1.7284546720778236,sum(gross $)/45/10000
+slippage_est_total_pct_of_capital_return_units,0.0032231761098209634,"estimate: sum(qty*(entry_px+exit_px)*slip/eq_before)/45; slippage is inside the fill prices, not in fees"
+fees_plus_slippage_from_2x_stress_summed_daily,0.013258225961827338,summed daily return lost when fees and slippage are doubled (= the 1x fee+slippage drag in daily-return units)
+fees_R_mean,0.029854561800752175,dev.fees_R: mean fees per trade in R
+funding_R_mean,0.262749823564993,dev.funding_R: mean funding per trade in R
+exit_reason_exit_signal,1277.0,close below the trailing level
+exit_reason_end,27.0,"still open at 2023-12-31, closed at the window end"
+exit_reason_stop,0.0,sentinel stop must never fire
+state_synchronous_start_entries,0.0,"positions already long at the window start (entered at the first in-window execution, 2020-01-01 00:01); none: the first entry is 2020-01-05"
+trades_per_year,325.77686516084873,dev.trades_per_year
+sub_trades_per_week,6.247775496235455,dev_detail.activity.sub_trades_per_week
+order_days_share,0.6399726214921286,dev_detail.activity.order_days_share: days with >=1 sub-sleeve entry or exit
+netted_orders_per_day,1.3011635865845312,"unique (coin, day) with an entry or exit / 1461 (live d1.order_count definition)"
+netted_orders_per_day_excl_window_end,1.299794661190965,"same, without the forced window-end exits"
+unnetted_sub_orders_per_day,1.78507871321013,entries + exits of sub-sleeves / 1461
+avg_open_sub_positions,14.609171800136892,of 45; dev.exposure = 14.63 is the minute-based equivalent
+max_open_sub_positions,42.0,on 2021-04-06
+days_with_zero_open_positions_share,0.10130047912388775,
+mean_gross_exposure_account,0.1416900572256163,dev_detail.exposure.mean_gross_exposure (notional / account)
+r_floors,0.0,dev_detail.floors
+state_mismatches,0.0,dev_detail.mismatches
