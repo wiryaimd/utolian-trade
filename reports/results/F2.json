@@ -234,5 +234,97 @@
   ">=3/5 symbols R>0": true
  },
  "dev_pass": false,
- "dev_pass_ex_freq": false
+ "dev_pass_ex_freq": false,
+ "holdout": {
+  "trades": 751,
+  "win_rate": 0.2809587217043941,
+  "avg_R": 0.1342797440986418,
+  "median_R": -0.9528465385102536,
+  "t_stat": 1.205343775132912,
+  "pf": 1.2145833341820764,
+  "total_R": 100.84408781808,
+  "total_return": 0.3150993550203147,
+  "cagr": 0.10330116519048005,
+  "sharpe": 0.44921289189149066,
+  "sortino": 0.8572345286731258,
+  "max_dd": 0.5623044205960493,
+  "calmar": 0.18371039139436177,
+  "dd_days": 250,
+  "exposure": 2.417667704577734,
+  "avg_hold_h": 78.5758100310697,
+  "trades_per_year": 269.53294001966566,
+  "long_n": 400,
+  "long_avg_R": 0.29313658486858574,
+  "short_n": 351,
+  "short_avg_R": -0.04675369267622302,
+  "fees_R": 0.03316009122915582,
+  "funding_R": 0.010783138576289231,
+  "max_year_share": 0.518412946212745,
+  "years_positive": 3,
+  "years": [
+   {
+    "year": 2024,
+    "trades": 262,
+    "win_rate": 0.2824427480916031,
+    "avg_R": 0.1995377124958307,
+    "sum_R": 52.27888067390764,
+    "return": 0.3319172645147488
+   },
+   {
+    "year": 2025,
+    "trades": 277,
+    "win_rate": 0.2851985559566787,
+    "avg_R": 0.025445970126671377,
+    "sum_R": 7.048533725087971,
+    "return": -0.10288113865317283
+   },
+   {
+    "year": 2026,
+    "trades": 212,
+    "win_rate": 0.27358490566037735,
+    "avg_R": 0.19583336518436031,
+    "sum_R": 41.516673419084384,
+    "return": 0.10060461334902304
+   }
+  ],
+  "trade_mdd": 0.5290844838795548,
+  "boot_mdd_p95": 0.7035238183495479
+ },
+ "holdout_all": {
+  "trades": 939,
+  "win_rate": 0.29179978700745474,
+  "avg_R": 0.11727899221620454,
+  "median_R": -0.9233430286331432,
+  "t_stat": 1.2430643571447815,
+  "pf": 1.1886217554576017,
+  "total_R": 110.12497369101607,
+  "total_return": 0.2086503207606354,
+  "cagr": 0.07037906373488312,
+  "sharpe": 0.39601938889528454,
+  "sortino": 0.7462854820435196,
+  "max_dd": 0.5399537989895393,
+  "calmar": 0.13034275129944328,
+  "dd_days": 592,
+  "exposure": 3.0259156833824976,
+  "avg_hold_h": 78.65447284345048,
+  "trades_per_year": 337.0058997050147,
+  "long_n": 504,
+  "long_avg_R": 0.25681228680646945,
+  "short_n": 435,
+  "short_avg_R": -0.04438716979182653,
+  "fees_R": 0.03565989762185982,
+  "funding_R": 0.010652849252492515,
+  "max_year_share": 0.5781668248408823,
+  "years_positive": 2,
+  "years": 3
+ },
+ "holdout_gates": {
+  "holdout trades>=30": true,
+  "holdout trades/yr>=52": true,
+  "holdout avg_R>0": true,
+  "holdout Sharpe>=50% dev": false,
+  "holdout MDD<=boot p95": true
+ },
+ "holdout_status": "clean (4 alts; BTC info only)",
+ "final_pass": false
 }

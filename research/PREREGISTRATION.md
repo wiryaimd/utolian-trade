@@ -1096,3 +1096,29 @@ F2 failed Round 3's dev gates on DSR and plateau, so under the registered rules 
   - the 2024-26 result of its close relative F1 has been seen.
 - It will be reported in full: the summary, Round 3's holdout gates, the BTC sleeve, and comparisons with dev, with
   F1's 2024-26 result and with holding the coins.
+
+### Deviation 3 outcome (2026-10-18)
+
+**How the run went:**
+- The run followed the text above: commit `32b88c3` came before the single `[R3 F2-info:` unlock, and only F2 was
+  evaluated.
+- One independent check loaded the window, logged as `[R3 F2-info verify]`. It re-simulated F2 with its own code and
+  reproduced all 939 trades and every daily return (differences of 1e-14 at most).
+- **Disclosure:** before its unlock, that check read only the row counts, the first and last funding timestamps and the
+  1m gap list, without logging. No prices or returns were read.
+
+**F2 on 2024-01-01 → 2026-10-13, 4-alt scope, after costs and funding:**
+- 751 trades (270 a year), average R +0.134, win rate 28%, profit factor 1.21, trade t 1.21;
+- +31.5% (CAGR 10.3%), Sharpe 0.449, worst end-of-day drawdown 56.2%;
+- 2024 +33.2%, 2025 -10.3%, 2026 +10.1%;
+- longs +0.29 R and shorts -0.05 R; XRP gave 73% of the R;
+- against the 4-alt equal-weight hold, which made +88.4% with a 64.1% worst drawdown: alpha PSR 0.78;
+- correlation with F1 on the same scope and dates: 0.80 daily. F1 made +80.7%, with Sharpe 0.82 and a 27.6% worst
+  drawdown.
+
+**Round 3 holdout gates:**
+- Passed: trades ≥ 30, trades a year ≥ 52, average R > 0, and drawdown ≤ the bootstrap p95 (52.9% ≤ 70.4%).
+- Failed: Sharpe ≥ 50% of dev (0.449 against 0.471).
+
+`final_pass` is false, as fixed above. Funding data ends on 2026-09-30, so the last 13 days carry no funding, as in
+F1's run; the effect is about 0.3%. **Consequence:** F2 stays closed. It adds nothing next to F1.

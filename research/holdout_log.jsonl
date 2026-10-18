@@ -4,3 +4,5 @@
 {"utc": "2026-10-18T13:48:51.812478+00:00", "reason": "USER-APPROVED PROTOCOL DEVIATION (Deviation 2): D1 failed round-5 dev; the owner asked to see D1 on 2024-01..2026-09; information only, cannot pass [R5 D1-info: D1 only, information; XS stays locked]"}
 {"utc": "2026-10-18T13:51:45.962000+00:00", "reason": "USER-APPROVED PROTOCOL DEVIATION (Deviation 2) independent check [R5 D1-info verify resim]"}
 {"utc": "2026-10-18T13:53:29.906585+00:00", "reason": "USER-APPROVED PROTOCOL DEVIATION (Deviation 2) independent check [R5 D1-info verify context]"}
+{"utc": "2026-10-18T14:53:12.856151+00:00", "reason": "USER-APPROVED PROTOCOL DEVIATION (Deviation 3): F2 failed round-3 dev (DSR, plateau); the owner asked for its 2024-26 backtest; 4-alt scope, BTC info only; cannot yield final pass [R3 F2-info: [F2]"}
+{"utc": "2026-10-18T14:59:48.733169+00:00", "reason": "USER-APPROVED PROTOCOL DEVIATION (Deviation 3) independent check [R3 F2-info verify]"}
