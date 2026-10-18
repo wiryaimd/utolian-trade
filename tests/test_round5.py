@@ -413,3 +413,19 @@ def test_spot_red_flags():
             {**base, "status": "no_spot_1d"}, {**base, "median_overlap_basis": None}]
     flags = list(R.spot_red_flags(pd.DataFrame(rows))["red_flag"])
     assert flags == [False, True, True, True, True, True, True, False]
+
+
+def test_d1_info_run_needs_the_committed_deviation_runs_once_and_leaves_xs_alone(tmp_path, monkeypatch):
+    from btcq.research import round5 as R
+    (tmp_path / "D1.json").write_text('{"dev_pass": false}')
+    log = tmp_path / "holdout_log.jsonl"
+    monkeypatch.setattr(R, "RESULTS", tmp_path)
+    monkeypatch.setattr(R.store, "HOLDOUT_LOG", log)
+    monkeypatch.setattr(R, "SYMBOLS", [])
+    monkeypatch.setattr(R, "_git", lambda *a: "")
+    assert any("not committed" in p for p in R.preflight_d1_info())
+    monkeypatch.setattr(R, "_git", lambda *a: "## Deviation 2: D1 on 2024-2026")
+    assert R.preflight_d1_info() == []
+    log.write_text('{"reason": "x [R5 D1-info: D1 only, information; XS stays locked]"}\n')
+    assert any("already unlocked" in p for p in R.preflight_d1_info())
+    assert "[R5:" not in R.D1_INFO_TAG and "[R5 resume" not in R.D1_INFO_TAG    # XS's one unlock stays unused

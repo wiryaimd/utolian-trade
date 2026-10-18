@@ -288,6 +288,7 @@ def main() -> None:
     ap.add_argument("cmd", choices=["download", "sweep", "gates", "validate", "report", "r3-sweep",
                                     "r3-validate", "r4-symbols", "r4-universe", "r4-download", "r4-sweep",
                                     "r4-validate", "r5-power", "r5-download-spot", "r5-sweep", "r5-validate",
+                                    "r5-d1-info",
                                     "r6-power", "r6-download", "r6-sweep", "r6-validate"])
     ap.add_argument("--strategy", default="all")
     ap.add_argument("--finalists", action="store_true")
@@ -357,6 +358,11 @@ def main() -> None:
                 raise SystemExit("r5-validate needs --unlock-holdout")
             round5.cmd_validate(a.reason if a.reason != ap.get_default("reason")
                                 else "Round 5 holdout (pre-registered)")
+        elif a.cmd == "r5-d1-info":
+            if not a.unlock_holdout:
+                raise SystemExit("r5-d1-info needs --unlock-holdout")
+            round5.cmd_d1_info("USER-APPROVED PROTOCOL DEVIATION (Deviation 2): D1 failed round-5 dev; the owner "
+                               "asked to see D1 on 2024-01..2026-09; information only, cannot pass")
     elif a.cmd.startswith("r6-"):
         from btcq.research import round6
         if a.cmd == "r6-power":

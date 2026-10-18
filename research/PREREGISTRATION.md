@@ -1016,3 +1016,38 @@ equal-weight hold). This run is information only. Its result can never, by itsel
   bear market.
 - The dashboard shows a running alpha estimate from day 30. Looking at it early changes nothing: the rule above is
   the only verdict.
+
+## Deviation 2: D1 on 2024-2026, owner-approved (2026-10-18, recorded BEFORE the evaluation)
+
+D1 failed Round 5's dev gates. Its holdout was registered as contaminated: information only, and run only inside an
+XS unlock. XS failed too, so no Round 5 holdout was opened. On 2026-10-18 the owner asked to see D1 on 2024-2026
+anyway, as the most relevant years, accepting that this is outside the registered rules.
+
+**How it runs:**
+- The registered rule and primary config (all9), with Round 5's code and costs unchanged. The window is Round 5's
+  holdout, 2024-01-01 → 2026-09-30, with the earlier history used for signals as usual. There is one engine run per
+  sub-sleeve and no shift null.
+- One unlock, logged in `research/holdout_log.jsonl` with the tag `[R5 D1-info:`, made by
+  `python -m btcq.research.run r5-d1-info --unlock-holdout`. The command refuses to run twice and never evaluates XS:
+  **XS's holdout stays locked and clean.**
+- Independent re-checks of the result may load the same window; each such load is logged with the tag
+  `[R5 D1-info verify`.
+- This is not a new trial: the trial registry and N_eff are unchanged.
+
+**What will be reported (fixed now, before the data is seen):**
+- total return, CAGR, Sharpe, worst end-of-day drawdown and weekly t;
+- beta and alpha PSR against Round 5's benchmark, the equal-weight daily-rebalanced hold of the listed perps;
+- D1 and the hold for each year (2024, 2025, and 2026 to 30 September), the year share, and results per coin and per
+  lookback;
+- activity (sub-trades per week, days with an order), fees and funding;
+- the same account added up the way the live paper book does it: each sub-sleeve keeps its own cash, with no daily
+  rebalancing;
+- reference yardsticks only, not gates: mean daily return > 0, Sharpe at least half of dev's (≥ 0.68), worst drawdown
+  against dev's 19%, and alpha PSR against 0.95.
+
+**What it can and can't mean:**
+- It cannot make D1 pass Round 5 or change Round 5's FAIL. It cannot change the registered forward test either: its
+  rules, its 12/24-month verdict and its account construction stay as written.
+- The data is not clean for this idea. The long-only trend idea came partly from S1's and F1's earlier 2024-2026 runs
+  on these markets, and the period's general market history is known. The result is information only.
+- Whatever it shows, it is reported in full in the Round 5 records and in `research/D1/README.md`.

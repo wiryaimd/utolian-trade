@@ -320,7 +320,7 @@ def d1_evaluate(coins: dict[str, Coin], w: Window, with_null: bool = True,
            "config_totals": {c: float((1 + d).prod() - 1) for c, d in cfg_daily.items()},
            "alpha_vs_ew": stats.beta_alpha(daily, bench), "floors": floors,
            "mismatches": d1_mismatches(subs, parts, coins, w), "exposure": d1_exposure(subs, parts, coins, w),
-           "daily": daily, "res": res,
+           "daily": daily, "res": res, "parts": parts,
            "cfg_daily": cfg_daily, "cfg_trades": cfg_trades, "pbo_logits": logits, "benchmark_daily": bench,
            "activity": {"order_days_share": _order_day_share(res.trades, w),
                         "sub_trades_per_week": len(res.trades) / (len(w.calendar) / 7)}}
@@ -618,7 +618,8 @@ def cmd_sweep(rerun: bool = False) -> None:
 
 
 def _public(ev: dict) -> dict:
-    skip = {"daily", "res", "cfg_daily", "cfg_trades", "pbo_logits", "plan", "stress_trades", "benchmark_daily"}
+    skip = {"daily", "res", "parts", "cfg_daily", "cfg_trades", "pbo_logits", "plan", "stress_trades",
+            "benchmark_daily"}
     out = {k: v for k, v in ev.items() if k not in skip}
     if "null" in out:
         out["null"] = {k: v for k, v in out["null"].items() if k != "dist"}
@@ -670,6 +671,57 @@ def preflight_holdout() -> tuple[list[str], bool]:
         if int(m.max()) < end_ms + 86_400_000 - 60_000 or int(f.max()) < end_ms:
             probs.append(f"{s}: 1m or funding data does not reach 2026-09-30")
     return probs, resume
+
+
+D1_INFO_TAG = "[R5 D1-info:"
+
+
+def preflight_d1_info() -> list[str]:
+    """Deviation 2 (PREREGISTRATION.md): D1's 2024-26 information run. One unlock only, and only once the
+    deviation is committed; XS is never evaluated here."""
+    probs = []
+    d1 = json.loads((RESULTS / "D1.json").read_text()) if (RESULTS / "D1.json").exists() else {}
+    if not d1:
+        probs.append("D1.json missing")
+    if "holdout" in d1:
+        probs.append("D1 already has a holdout result")
+    log = store.HOLDOUT_LOG.read_text() if store.HOLDOUT_LOG.exists() else ""
+    if D1_INFO_TAG in log:
+        probs.append("the D1 information run was already unlocked once")
+    if "Deviation 2" not in _git("show", "HEAD:research/PREREGISTRATION.md"):
+        probs.append("Deviation 2 is not committed in research/PREREGISTRATION.md")
+    end_ms = int((HOLD.end - DAY).value // 10**6)
+    for s in SYMBOLS:
+        d = store.symbol_dir(s)
+        m = pd.read_parquet(d / "perp_1m.parquet", columns=["ts"])["ts"]
+        f = pd.read_parquet(d / "funding.parquet", columns=["ts"])["ts"]
+        if int(m.max()) < end_ms + 86_400_000 - 60_000 or int(f.max()) < end_ms:
+            probs.append(f"{s}: 1m or funding data does not reach 2026-09-30")
+    return probs
+
+
+def cmd_d1_info(reason: str) -> None:
+    """D1 on Round 5's holdout window as information only (Deviation 2). Saves the usual result files plus each
+    sub-sleeve's daily returns and the equal-weight hold, so checks need not reopen the window."""
+    probs = preflight_d1_info()
+    if probs:
+        raise SystemExit("holdout stays locked: " + "; ".join(probs))
+    _clean_src()
+    store.unlock_holdout(f"{reason} {D1_INFO_TAG} D1 only, information; XS stays locked]")
+    coins = load_coins(HOLD)
+    ev = d1_evaluate(coins, HOLD, with_null=False)
+    _write("D1", "holdout", ev)
+    pd.DataFrame({f"{s}|{L}": d for (s, L), (d, _) in ev["parts"].items()}).to_parquet(
+        RESULTS / "D1_holdout_sleeves.parquet")
+    ev["benchmark_daily"].rename("ret").to_frame().to_parquet(RESULTS / "D1_holdout_bench.parquet")
+    d1 = json.loads((RESULTS / "D1.json").read_text())
+    d1 |= {"holdout": _public(ev), "holdout_status": "contaminated: information only (owner-approved Deviation 2, "
+                                                      "run after D1 failed dev)",
+           "holdout_window": [str(HOLD.start.date()), str((HOLD.end - DAY).date())]}
+    _save_json(RESULTS / "D1.json", d1)
+    print(f"D1 2024-26 (information only): {ev['summary']} | alpha vs EW {ev['alpha_vs_ew']} | "
+          f"year share {ev['year_share']}")
+    _log_run("r5-d1-info", summary=ev["summary"])
 
 
 def cmd_validate(reason: str) -> None:
