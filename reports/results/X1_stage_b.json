@@ -1,0 +1,33 @@
+{
+ "study": "X1",
+ "stage": "B",
+ "code": "F1X",
+ "version": 1,
+ "B1": {
+  "info": {
+   "days": 75,
+   "days_missing": [],
+   "book_dropped": 0,
+   "tape_dropped": 0,
+   "spans": 294
+  },
+  "cost_model": "x1_cost_v1.csv",
+  "cost_sha256": "ca83657bebc200e794a28e06a462bb60e51d566bc076a6d965b3ee6f28e7c040",
+  "legs": 3522,
+  "manifest_sha256": "3ee1493d8ed88e0c297eb175074424c3ad4b6f8a5d8c75e54954e8898dfb12da",
+  "inputs_sha256": {
+   "X1_q3_legs.parquet": "95106819c5cb56da6608527205a7fa45db172d99184b832093b0dbdd9f65fe24",
+   "stage_a_q3_costs.csv": "a82791bf89e289f8e966077d876d19c036b05bd05393e2b01a89119fac751b41"
+  },
+  "code_sha256": "1ac60ed36fc79a82be1039a175e0b2ab8e10d5a93f69e6d918071c9a72760275",
+  "prereg_section_sha256": "b326e76bb1a61312101c4d43104df31557e16e5455b52f6f736e9db761c15eed",
+  "f1_daily_sha256": "3930e651a1ba298ab01425a93f3f0bc4dc57208af70f4ffb655d3feca4c49027",
+  "exchange_info_sha256": "918bc3087252d4fee05e9cf8f49039b9c182e3a304a1fef4e63180d18b2fa338",
+  "numpy_version": "2.4.6",
+  "numba_version": "0.68.0",
+  "pandas_version": "3.0.6",
+  "scipy_version": "1.17.1",
+  "pyarrow_version": "26.0.0",
+  "python_version": "3.11.8"
+ }
+}
