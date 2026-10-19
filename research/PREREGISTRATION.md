@@ -1577,3 +1577,218 @@ the registered rules and re-ran the committed dev panel.
 - It then lost almost everything in 2022–23. It traded every day, as wanted, but daily activity did not bring an
   edge here.
 - This closes daily cross-sectional momentum on this universe, after XS failed on the majors.
+
+## Execution study X1 — registered 2026-10-19, before any X1 run or download
+
+**Why.** Every backtest so far fills as a taker: 5 bp fee plus 1–2 bp slippage per side. The owner wants more
+activity and asked whether post-only limit (maker) orders would make trading cheaper. This study measures, on dev
+data only (before 2024-01-01):
+- **Q1:** whether maker-first execution raises F1's dev net return, under a conservative fill model, without
+  changing which trades F1 takes;
+- **Q2:** D1 (settled by arithmetic below);
+- **Q3:** what maker-first execution costs per side for three kinds of order (no signal, momentum, reversion), and
+  whether any already-tested fast family's dev gross edge lies in the band that execution could change.
+
+It never touches API keys, places no orders and changes nothing in the paper bot.
+
+**Owner decisions (2026-10-19):**
+- the plan in `C:\Users\adnya\.claude\plans\partitioned-dazzling-kazoo.md` is approved;
+- the work is staged: this registration and Stage A first, then a stop for the owner's OK before any download.
+
+**Code:** commit `8f232eb`. New files:
+- `src/btcq/backtest/maker_engine.py` (the maker-first account and single-leg simulator);
+- `src/btcq/backtest/queue_sim.py` (the tick-level queue simulator);
+- `src/btcq/data/ticks.py` (the stream-and-discard tick downloader);
+- `src/btcq/research/x1_execution.py` (the runner);
+- `tests/test_engine_maker.py`, `tests/test_queue_sim.py`, `tests/test_ticks.py` and `tests/test_x1.py`.
+
+Changed files: `stats.py` (`block_bootstrap_means`, appended) and `run.py` (the `x1-*` verbs). **`engine.py` is
+unchanged.** The start record pins:
+- the SHA256 of the 20 files in `x1_execution.CODE_FILES`;
+- this section's committed text;
+- `F1_dev_daily.parquet` and the exchangeInfo snapshot;
+- the numpy, numba, pandas, scipy, pyarrow and Python versions.
+
+### What is already known (from committed dev results, before this registration)
+The figures are sums of trade returns ÷ sleeves, in % of the account per year, 2020–2023.
+
+| | F1 | D1 |
+|---|---|---|
+| Legs a maker order could take | 1,040 of 1,200 (84 exits are same-minute reversals) | 2,581 of 2,608 |
+| Ceiling: every eligible leg maker at the taker price, slippage saved, nothing missed | 1.1–2.3 %/yr | 0.19–0.35 %/yr |
+| Ceiling with the fee saving only | 0.76–1.50 %/yr | 0.13–0.24 %/yr |
+
+**D1 is NO-GO by arithmetic:** even its full ceiling is below the +0.5%/yr bar of rule (a). No D1 run is made.
+
+### Execution model (pinned)
+**Legs.**
+- Maker-eligible: entries and decision exits (exit_signal, time, reverse).
+- Always taker: stops, targets, forced and end-of-window closes.
+
+**Policy "post, then cross"** (`maker_engine.run`, `MakerPolicy(T, model, fallback)`):
+- At m0, the taker reference minute (the bar close plus the registered 1-minute latency), post a post-only limit at
+  P = open(m0) − 1 tick for a buy (+ 1 tick for a sell).
+- It rests until the first 1m row at or after m0 + T minutes. Whatever is still open there crosses at that row's
+  open, paying the taker fee plus the registered slippage.
+- **Primary: T = 15, no re-pegging.** Grid T ∈ {5, 15, 60}; T = 5 and T = 60 are the plateau neighbours.
+- **The quantity is fixed at post:** risk sizing at the taker reference price o(m0)·(1 + side·slip) and the
+  signal's stop, never re-sized.
+- **Reversal:** an exit order and an entry order posted at the same decision. The entry is sized on the cash a taker
+  exit at m0 would leave. If the old position's stop fires while the exit rests, only the exit order is cancelled.
+- **Resting exits:** the position keeps its stop, which is checked before the exit order in each minute (the stop
+  wins a tie).
+- **Funding:** any funding settlement inside a resting window is a hard error (F1 decides at hh:01 with T ≤ 60, so
+  none is expected).
+- **T = 0** is the registered taker run. It is bit-identical to `engine.run` (a parity test on synthetic paths and on
+  F1 ETHUSDT dev).
+
+**1m models:**
+- **strict, the decision basis:** a fill needs low < P (buy) or high > P (sell) in a minute from m0 on, beyond a
+  relative tolerance of 1e-9·P. Under price-time priority a print through P means the level at P was cleared, so
+  this is a sufficient fill condition apart from sub-minute latency, which check (f) measures. The fill is booked at
+  the registered taker price with the maker fee, so a fill saves only the 3 bp fee difference. Unfilled legs pay the
+  drift to the fallback.
+- **central (reported):** the same fill rule, filled at o(m0), so it credits the registered slippage.
+- **optimistic (reported, a model and not a bound):** low ≤ P (high ≥ P), filled at P.
+
+**Tick size per symbol and month** (`research/x1/tick_sizes.csv`):
+1. Unique 1m OHLC prices are rounded to 10 significant digits.
+2. The candidate tick is the smallest positive gap, snapped to {1, 2, 5}×10^k.
+3. It is used if at least 99% of the gaps are whole multiples of it; otherwise the 2026-10-16 exchangeInfo tick is
+   used.
+
+**Hard checks** (each is a logged hard error):
+- the 5-sleeve taker portfolio reproduces the committed `F1_dev_daily.parquet` to 1e-12;
+- every trade's fees equal its legs' maker or taker fees;
+- every posted order ends in exactly one outcome;
+- mean saving = p_fill × mean saving filled + (1 − p_fill) × mean saving unfilled, and a strict fill saves exactly
+  3 bp;
+- no trade, daily return or Q3 leg is dated on or after 2024-01-01.
+
+**Tick model** (`queue_sim.simulate_legs`; pinned now, used in Stage B only):
+- **Placement:** the order is live at t0 + 60 s, at the best bid (buy) or best ask (sell) of the last bookTicker row
+  at or before that instant. The taker benchmark is the opposite best at that instant.
+- **Queue ahead** = the bookTicker size at P. Only prints from the other side count:
+  - a print through P fills the remainder;
+  - at-P volume first consumes the queue ahead, and any excess fills us (partial fills tracked).
+- **Book rows:**
+  - a bid below P sets the queue ahead to 0, because our order is then the best bid;
+  - a bid at P caps the queue ahead at the shown size;
+  - **pro-rata variant:** a size drop not explained by trades at P since the previous observation of the level (in
+    practice the same-millisecond trades) reduces the queue ahead pro rata.
+- At equal timestamps, trades are applied before book rows.
+- **Expiry:** whatever is still open at t0 + 60 s + T crosses at the then best opposite price.
+- **Savings:** measured against the tick taker benchmark; fees enter only through the maker share.
+- **Usable legs:** legs outside the extracted coverage windows, or not complete through the markouts, are excluded
+  and counted. A leg during which the archived opposite best reached P is flagged (`book_crossed`), since the model
+  fills only on prints.
+- **B1 sizing:** generic legs are sized at $1,386 (F1's mean order on $10k). B2 legs use F1's own quantities, and a
+  reversal is one order filled exit first.
+
+### Q3: generic cost curves (information only)
+**Stage A, on 1m data** (`research/x1/stage_a_q3_costs.csv`). For each of the 5 coins on dev perp rows
+(2020-01 → 2023-12):
+- **random:** 8,000 legs, rows and then sides drawn from one generator with seed 1102, in BTC, ETH, SOL, XRP, BNB
+  order;
+- **momentum:** a 1h close crossing above the prior 24-bar high is a buy, below the prior low a sell;
+- **reversion:** a 1h log return beyond 2σ of the prior 720 1h returns, traded against.
+
+How legs are run and costed:
+- All legs are filled at m0 = the 1h close + 1 min. Only legs whose minutes up to T = 60 plus the 60-minute markout
+  are all in the data are used, so every T and model sees the same legs.
+- c_eff = (5 bp + slippage) − the mean saving, with a day-clustered 95% CI.
+
+**Stage B1 (after the owner's OK):** the generic legs on B1's days go through the tick model, giving per-class and
+per-coin corrections. These form **X1-cost-v1** (`research/x1/x1_cost_v1.csv`, pinned by SHA256).
+
+**Screen** (`research/x1/stage_a_screen.csv`; a re-read of committed dev trade files, no re-runs):
+- For S4, S5, S7, S8, F2–F6, the gross edge per trade, with slippage added back on every taker leg, is set against
+  the taker round trip and the maker-first round trip.
+- The maker-first round trip is computed at T = 15, per trade's coin: the entry class's c_eff + the random class's
+  c_eff for decision exits, or the taker cost for stop and other exits.
+- "Execution-sensitive" = maker-first < gross < taker. Momentum families are S4, S5, F2, F3 and F4; reversion
+  families are S7, S8, F5 and F6.
+- It is reported for all dev trades and for entries from 2020 on.
+- Any such family needs a new registered round, with new trials and a clean out-of-sample test.
+
+### Decision rules
+**F1 GO-SHADOW** requires all of these, for the primary under the strict model against the registered taker run
+(dev 2020-01 → 2023-12, 5-coin portfolio daily returns, d = maker − taker):
+- (a) mean(d) × 365 ≥ +0.5%/yr;
+- (b) the 5th percentile of 10,000 circular block-bootstrap means of d (block 30 days, seed 11) is above 0;
+- (c) strict T = 5 and T = 60 also have mean(d) > 0;
+- (d) the sum of d is above 0 in at least 3 of the 4 years, and the per-sleeve sum is above 0 in at least 4 of the
+  5 coins;
+- (e) Sharpe (daily, ddof 1, √365) falls by at most 0.02, and the worst drawdown worsens by at most 1 percentage
+  point;
+- (f) on the F1 legs in the bookTicker window (B2), the tick model's mean saving (conservative queue) is at least
+  the strict 1m model's minus 0.5 bp.
+
+**What the outcomes mean:**
+- If strict fails any of (a)–(e) in Stage A, F1 is NO-GO and B2 is never downloaded.
+- If (a)–(e) pass, the decision depends on (f), which needs the owner's OK for the B2 download.
+- A GO-SHADOW only allows a separately registered forward shadow book. Real money is the owner's decision, after a
+  forward pass.
+
+### Data (Stage B; every download needs the owner's OK)
+- **B1:** 15 days per coin, seed 1101, from 2023-05-16 → 2023-12-30: bookTicker 5.2 GB + aggTrades 0.5 GB.
+- **B2** (only after a strict pass): the F1 legs in 2023-05-16 → 2023-12-31: bookTicker 13.3 GB + aggTrades 1.4 GB.
+- **Holdout guard:**
+  - a key's last day (a monthly key's month end) must be on or before 2023-12-31;
+  - windows reaching 2024-01-01 are dropped;
+  - every time column of every parsed row is asserted to be before 2024-01-01.
+- **Handling:** files are streamed and discarded (one zip per worker, at most 2 workers). The manifest (key, bytes,
+  SHA256, rows) is committed.
+
+### Trials
+- F1X, version 1, adds 5 dev trials: strict T = 5, 15 and 60 with fallback, and strict T = 15 and 60 without
+  (post-and-cancel).
+- Their portfolio daily returns go to `reports/results/F1X_trial_returns.parquet`, and the project N_eff ratchet is
+  updated.
+- The post-and-cancel runs change F1's trades. They are information only; a limit-only F1 needs a new round.
+
+### Run order
+1. The code commit, then this registration.
+2. `x1-start` logs a start record with the pins; it is committed.
+3. `x1-stage-a` runs once. Any error after its run record is a logged hard error that closes the version; a fix
+   needs a version bump. Its outputs are pinned by SHA256 in its log record.
+4. Stop for the owner's OK before `x1-download --set B1`, and again before B2.
+5. Each Stage B set runs once.
+
+### Changes from the approved plan, decided before any X1 run
+- **A new module instead of an engine option.** The maker-first path is `maker_engine.py`, not an option inside
+  `engine.py`, because earlier rounds pin `engine.py` by hash.
+- **The account level uses the 1m models only.** The tick model checks legs (B1 calibration, check (f)), as the
+  approved plan's stages say.
+- **Implementation choices the plan left open:**
+  - a resting entry still open at the window end, or at a forced exit, crosses at that minute's close and is closed
+    with it;
+  - a maker entry starts its trailing extreme at its market price (o(m0) under strict);
+  - an entry never opens on cash ≤ 0;
+  - a maker fill at or beyond its own stop opens nothing, as the engine's limit fills (strict can't hit this rule);
+  - the B1 and B2 windows run from 10 min before to 2 h after each leg.
+
+### Disclosures
+- **Ceilings computed beforehand.** F1's dev results and the cost ceilings above were computed from committed
+  results before this registration.
+- **The screen's inputs were already read.** The plan's review read the committed dev trade files and reported
+  per-family gross edges per trade in bp: S7 −11.9, S8 −26.8, F5 1.4, F6 4.5, F2 100.8, F4 47.9, S4 17.7, S5 14.7,
+  F3 24.8.
+- **Partial Stage A results were seen before this registration.** While testing and reviewing the code, agents ran
+  the maker-first engine on real dev data (dev loaders only; nothing from 2024 or later). What they saw:
+  - the taker run reproduces F1 on all 5 coins exactly;
+  - with strict T = 15, entries filled as maker 577 of 600 times (BTC 114/118, ETH 135/136, SOL 107/109, XRP
+    106/115, BNB 115/122) and decision exits 422 of 440, with no stop pre-emption and no funding inside a window;
+  - at strict T = 5: ETH 133/136, BTC 110/118;
+  - two sleeve equities while checking a float-tolerance fix: XRP strict T = 15 ended at $16,370.89 without the fix
+    and $16,243.48 with it; ETH strict T = 5 at $13,647.20 and $13,627.85;
+  - Q3-style random legs: XRP strict T = 5 had a fill rate of 0.81 and a mean saving of −1.07 bp without the fix,
+    0.78 and −1.57 bp with it (T = 15: 0.89 and −1.26 bp, then 0.88 and −1.75 bp); BTC strict T = 5 was 1.87 bp,
+    then 1.77 bp.
+
+  The decision rules were fixed in the approved plan before any of this, and none was changed afterwards. The only
+  code change made after these numbers were seen was the float-tolerance fix to the touch test (exact one-tick
+  touches had been counted as trade-throughs), and it moves every figure in the conservative direction. The
+  reviewer's point is recorded: with ticks this small, strict fills nearly every leg, so its result sits close to the
+  fee-only ceiling, and check (f) is the operative test of whether the 1m model is too optimistic.
+- **bookTicker exists only from 2023-05-16 in dev,** so the calibration covers one fairly calm regime.
