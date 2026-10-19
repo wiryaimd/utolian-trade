@@ -1907,3 +1907,101 @@ SHA256):
   optimistic model, which fills on a touch at a better price, gets near 2.5 bp. Only tick data (B1, 5.7 GB) can say
   which is closer to reality. Even under the optimistic model, no earlier fast family except S4's 2020+ entries
   sits where cheaper execution would flip it.
+
+## Execution study X1 — Stage B1 outcome (2026-10-19, after the owner-approved B1 download)
+
+**What ran:**
+- **The download.** The owner approved the B1 download on 2026-10-19. 150 archives were downloaded, checksum-verified,
+  streamed and discarded (commit `e031e66`): bookTicker and aggTrades for 15 days per coin (seed 1101), 75 coin-days
+  between 2023-05-22 and 2023-12-30, 5.48 GB.
+  - **Kept:** 403M book rows and 35.6M trades, as parquet under `data/ticks/` (8.9 GB, not committed; more than the
+    plan's estimate because B1 keeps whole days). No row is on or after 2024-01-01.
+- **The stage.** `x1-stage-b --set B1` ran once (commit `b8cc816`). It simulated the 587 complete generic Q3 legs
+  that fall on those days through the tick model, at every T and in both queues: 3,522 runs.
+  - **Excluded:** 30, 33 and 48 legs at T = 5, 15 and 60. One had no book: it went live at exactly 00:00 after a
+    day that was not downloaded. The others were legs whose 60-minute markout ran past the day loaded.
+
+**X1-cost-v1** (`research/x1/x1_cost_v1.csv`; all 5 coins; conservative queue; tick and 1m savings on the same
+legs; the taker pays 6.6 bp per side):
+
+| Kind of order | T | Legs | Tick model saving | 1m strict | 1m central | Correction (tick − strict) | c_eff per side (v1) |
+|---|---|---|---|---|---|---|---|
+| random | 5 | 410 | 2.16 bp | 1.37 | 2.78 | +0.79 | 4.97 bp |
+| random | 15 | 407 | 2.48 bp | 1.69 | 3.22 | +0.79 | **4.89 bp** |
+| random | 60 | 400 | 2.26 bp | 1.55 | 3.12 | +0.70 | 4.87 bp |
+| momentum (1h breakout) | 5 | 75 | 1.23 bp | 2.03 | 3.51 | −0.81 | 6.60 bp |
+| momentum | 15 | 75 | 2.51 bp | 1.86 | 3.34 | +0.64 | **5.31 bp** |
+| momentum | 60 | 71 | 2.02 bp | 1.70 | 3.20 | +0.31 | 5.31 bp |
+| reversion (1h 2σ, faded) | 5 | 72 | 1.89 bp | 0.99 | 2.52 | +0.90 | 6.19 bp |
+| reversion | 15 | 72 | 3.16 bp | 2.59 | 4.22 | +0.57 | **6.18 bp** |
+| reversion | 60 | 68 | 3.18 bp | 2.60 | 4.22 | +0.58 | 5.64 bp |
+
+c_eff (v1) = the Stage A full-dev strict c_eff minus the correction. The pro-rata queue gives the same or slightly
+higher savings (random T = 15: 2.63 bp).
+
+**How to read it:**
+- **The tick model lands between the two 1m models.** It saves 0.6–0.8 bp per side more than the strict 1m model,
+  and 0.6–1.0 bp less than the central one.
+- **The maker-first cost per side at T = 15** comes to about:
+  - 4.9 bp for an order with no signal (26% below the taker);
+  - 5.3 bp after a breakout;
+  - 6.2 bp when fading a move.
+
+  A maker-first round trip therefore costs about 10–12 bp against the taker's 13.2 bp.
+- **Precision.** The random correction (+0.79 bp, day-clustered SE about 0.15–0.17) and the reversion correction
+  (+0.57 bp, SE about 0.10) are resolved. The momentum correction is not:
+  - its T = 15 95% CI is about −0.5 to +1.8 bp;
+  - a single BTC leg (2023-06-05 16:01) joined a book with a momentary 20-tick spread and never filled, and it alone
+    turns the T = 5 correction from +0.97 into −0.81 bp.
+
+  Per-coin momentum and reversion cells (11–18 legs each) are noise; use the ALL rows.
+- **The strict 1m model is far too harsh on XRP.** Its random correction is +2.45 bp. With a 1–6 bp tick, a print
+  through one tick inside the open is rare, while fills at the touch from the queue are common.
+
+**F1, information only (this changes no verdict).**
+- **Why it matters.** Stage A's registered verdict (NO-GO, on the strict model) stands, and B2, which would have
+  measured F1's own legs, stays undownloaded as registered. But B1 shows that the strict model understates real
+  savings by 0.6–0.8 bp per side on generic orders.
+- **The arithmetic.** F1's shortfall against the bar is 0.16%/yr, about 0.4 bp per leg. That is inside the range of
+  the correction for breakouts (+0.64 bp, CI −0.5 to +1.8). So F1's real maker-first gain is probably between about
+  +0.3 and +1.0%/yr: $30–100 a year on a $10,000 account, close to the bar rather than clearly below it.
+- **What it would take to settle it.** Only a new registered version measuring F1's own legs on tick data could do
+  that.
+
+**Independent check (before this outcome was written).** Three verifiers:
+1. **Hand re-simulation.** One wrote its own tick event loop from the registered text. It reproduced every committed
+   tick leg exactly (586 legs × 3 T × 2 queues, including the 3 partial fills and a full T = 60 leg).
+2. **Cost model recompute.** One recomputed all 54 cost-model rows from the legs file (largest difference 1.8e-15).
+   It also confirmed:
+   - the 1m savings are bit-identical to Stage A's;
+   - the B1 legs are exactly the complete Q3 legs on the downloaded days;
+   - the tick data is sound on 200 sampled legs: bid < ask everywhere, the 1m open inside the spread on 198, a
+     1-tick spread on 196, and the joined book at most 0.93 s old.
+3. **Protocol audit.** It found everything clean:
+   - the commit chain `e0ed891` → `e031e66` → `b8cc816`, with `src/` unchanged since `8f232eb`;
+   - the registered section's pin intact, one download record and one Stage B1 record, every pin equal to the start
+     record, and no error;
+   - the 75 days re-derived offline from seed 1101, nothing dated 2024 or later in any row, and the holdout log
+     unchanged.
+
+**Notes from the check** (none moves a cost-model value by more than 0.005 bp):
+- **Pro-rata wording.** The registered text says "since the previous observation of the level". The code does not
+  cut the queue pro rata on the first book row after the level was unseen (it only caps it there). The other reading
+  moves the reported pro-rata mean by at most 0.002 bp. The corrections use the conservative queue only.
+- **Midnight exclusions.** Four random legs (2, 3 and 4 at T = 5, 15 and 60) were excluded at midnight even though
+  the next day was downloaded (BNB 09-17/18, ETH 09-20/21), because each coin-day is simulated on its own. All four
+  filled within 5 minutes; including them would move at most 9 cells by up to 0.0044 bp.
+- **Exclusion counts.** These were not logged by the run; they are recorded above.
+- **`book_crossed`.** The flag covers only the time an order rests (237 of 1,115 filled rows, and about 25% of all
+  legs): the archived opposite best reached the post price, which the model, filling only on prints, does not count
+  as a fill.
+- **Scope of X1-cost-v1.** It applies corrections measured in 2023-05 → 12 to 2020–2023 1m costs, whose taker
+  baseline includes the registered 1–2 bp slippage. It is a planning number for a future registered round, not a
+  validated cost.
+
+**In plain words:**
+- **For a faster strategy:** on these coins, posting a limit order and crossing after 15 minutes would cost about
+  1–1.7 bp less per side than a market order for ordinary or breakout orders, and about 0.4 bp less when fading a
+  move. A round trip costs roughly 10–12 bp instead of 13.2 bp. That helps, but it does not change the arithmetic
+  for a strategy whose edge is a few bp per trade, and the screen found no earlier fast family in that band.
+- **For F1:** the effect is worth roughly $30–100 a year on $10,000. The paper bot stays taker as registered.
