@@ -1,0 +1,687 @@
+{
+ "code": "IBS",
+ "name": "IBS daily mean reversion, SPY/QQQ/EWY proxies (IBS-L and IBS-LS co-primaries)",
+ "tf": "1d",
+ "version": 1,
+ "round": 8,
+ "hypothesis": "A close near the day's low predicts a higher next close-to-close return in equity ETFs, and a close near the high a lower one (Pagonidis 2014); held one day from the same close, the effect survives Binance perp costs, a random-timing null and an alpha test against holding the proxies.",
+ "rules": "Round 8 IBS: daily internal-bar-strength mean reversion (Pagonidis, NAAIM 2014) on the SPY, QQQ and EWY proxies of\nBinance TradFi perps.\n\nAt each trade date t of a market (its own rows), IBS_t = (C_t - L_t) / (H_t - L_t), where the close sits in the day's\nrange; IBS is undefined (no signal) when H <= L or H, L or C is missing.\n- IBS-L: long at the close of t if IBS_t <= theta, held to the next trade date's close; renewed while the signal\n  repeats, otherwise exited at that close.\n- IBS-LS: IBS-L plus a short at the close of t if IBS_t >= 1 - theta, held and renewed the same way; a long <-> short\n  switch is a flip at the same close.\nHold h = 2 (grid only): the position follows the latest signal in the last 2 closes, flat if there is none.\nSizing (Round 6's): min(0.25 / sigma, 2.0) x the sleeve's equity at entry or flip, sigma = std (ddof 0) of the last 90\ndaily log returns x sqrt(252); no position until sigma exists; never resized while the signal repeats.\nGrid: direction {L, LS} x theta {0.15, 0.20, 0.25} x hold {1, 2} = 12 configs, used only for N_eff, the plateau and\nPBO. Primaries (fixed): (L, 0.20, 1) and (LS, 0.20, 1).\n",
+ "configs": [
+  {
+   "dir": "L",
+   "theta": 0.15,
+   "hold": 1
+  },
+  {
+   "dir": "L",
+   "theta": 0.15,
+   "hold": 2
+  },
+  {
+   "dir": "L",
+   "theta": 0.2,
+   "hold": 1
+  },
+  {
+   "dir": "L",
+   "theta": 0.2,
+   "hold": 2
+  },
+  {
+   "dir": "L",
+   "theta": 0.25,
+   "hold": 1
+  },
+  {
+   "dir": "L",
+   "theta": 0.25,
+   "hold": 2
+  },
+  {
+   "dir": "LS",
+   "theta": 0.15,
+   "hold": 1
+  },
+  {
+   "dir": "LS",
+   "theta": 0.15,
+   "hold": 2
+  },
+  {
+   "dir": "LS",
+   "theta": 0.2,
+   "hold": 1
+  },
+  {
+   "dir": "LS",
+   "theta": 0.2,
+   "hold": 2
+  },
+  {
+   "dir": "LS",
+   "theta": 0.25,
+   "hold": 1
+  },
+  {
+   "dir": "LS",
+   "theta": 0.25,
+   "hold": 2
+  }
+ ],
+ "primaries": {
+  "IBS-L": 2,
+  "IBS-LS": 8
+ },
+ "neighbours": {
+  "IBS-L": [
+   0,
+   4,
+   3
+  ],
+  "IBS-LS": [
+   6,
+   10,
+   9
+  ]
+ },
+ "markets": [
+  "SPYUSDT",
+  "QQQUSDT",
+  "EWYUSDT"
+ ],
+ "holdout_scope": "clean (general-knowledge and planning-snippet disclosures)",
+ "rulebook": "practical (Amendments 1 and 2) + Round 8 gates (alpha, null p < 0.01)",
+ "start": "1993-07-01",
+ "end": "2015-12-31",
+ "full_book_day": "2000-09-20",
+ "dev": {
+  "IBS-L": {
+   "dev_pass": false,
+   "gates": {
+    "trades>=100": true,
+    "2x-cost mean daily>0": false,
+    "funding-stress mean daily>0": true,
+    "null p<0.01": true,
+    "DSR>=0.95 at the family N_eff": false,
+    "alpha PSR>=0.95 vs the account-scaled hold": false,
+    "best year<=65%": true,
+    "plateau: 3 neighbours positive": true,
+    ">=2 of 3 markets positive": true
+   },
+   "sharpe": 0.32693085346252143,
+   "alpha_psr": 0.771332065653439,
+   "alpha_sharpe": 0.1564193141074877,
+   "holdout_dd_limit": 0.37934763277370603
+  },
+  "IBS-LS": {
+   "dev_pass": false,
+   "gates": {
+    "trades>=100": true,
+    "2x-cost mean daily>0": false,
+    "funding-stress mean daily>0": false,
+    "null p<0.01": true,
+    "DSR>=0.95 at the family N_eff": false,
+    "alpha PSR>=0.95 vs the account-scaled hold": false,
+    "best year<=65%": false,
+    "plateau: 3 neighbours positive": false,
+    ">=2 of 3 markets positive": false
+   },
+   "sharpe": -0.2210900947032917,
+   "alpha_psr": 0.1434432044369588,
+   "alpha_sharpe": -0.22544383104939203,
+   "holdout_dd_limit": 0.6901612835526977
+  }
+ },
+ "candidate": null,
+ "dev_pass_any": false,
+ "n_eff_family": 2.028341380619883,
+ "holdout_bootstrap": {
+  "n": 10000,
+  "block": 30,
+  "seed": 7,
+  "n_out": 3926,
+  "source_from": "2000-09-20"
+ },
+ "dev_detail": {
+  "n_eff_family": 2.028341380619883,
+  "pbo": 0.042035742035742035,
+  "config_totals": {
+   "0": 0.5915603918057035,
+   "1": 2.7380923357152787,
+   "2": 0.7467421838118311,
+   "3": 2.8946346860122723,
+   "4": 0.46992472269277985,
+   "5": 2.785862863622962,
+   "6": -0.38767782278130924,
+   "7": 0.19981101141779511,
+   "8": -0.5310500234709206,
+   "9": 0.08108051513829384,
+   "10": -0.7044454467881152,
+   "11": -0.2124098855356571
+  },
+  "config_sharpes": {
+   "0": 0.30800751275538385,
+   "1": 0.5669922599764141,
+   "2": 0.32693085346252143,
+   "3": 0.5336789363937985,
+   "4": 0.2273747123205929,
+   "5": 0.49664159788313694,
+   "6": -0.15488856729678827,
+   "7": 0.1271936976028738,
+   "8": -0.2210900947032917,
+   "9": 0.09565329539335438,
+   "10": -0.3475221709440003,
+   "11": 0.006545234754143874
+  },
+  "config_trades": {
+   "0": 1835,
+   "1": 1506,
+   "2": 2271,
+   "3": 1758,
+   "4": 2583,
+   "5": 1918,
+   "6": 4235,
+   "7": 3598,
+   "8": 5051,
+   "9": 4201,
+   "10": 5649,
+   "11": 4671
+  },
+  "benchmark": {
+   "mean_daily": 0.0002179019553298377,
+   "sharpe": 0.37062340936376015,
+   "total_return": 2.575243720305431,
+   "max_dd": 0.6058432342324749
+  },
+  "roll_spread": {
+   "SPYUSDT": {
+    "1993-2000": 47.839747552032655,
+    "2001-2008": 75.37183925734071,
+    "2009-2015": 53.88026429923253
+   },
+   "QQQUSDT": {
+    "1993-2000": 145.83042821785884,
+    "2001-2008": 77.67053136615533,
+    "2009-2015": 30.198683360119425
+   },
+   "EWYUSDT": {
+    "1993-2000": 177.92614885080667,
+    "2001-2008": 140.19282190243956,
+    "2009-2015": 79.2195311413704
+   }
+  },
+  "window": [
+   "1993-07-01",
+   "2015-12-31"
+  ],
+  "runtime_s": 2.7088770866394043,
+  "primaries": {
+   "IBS-L": {
+    "config": {
+     "dir": "L",
+     "theta": 0.2,
+     "hold": 1
+    },
+    "summary": {
+     "trades": 2271,
+     "trades_per_year": 100.85351015938679,
+     "total_return": 0.7467421838118311,
+     "cagr": 0.025078703053128093,
+     "sharpe": 0.32693085346252143,
+     "vol_ann": 0.08741967548109703,
+     "mean_daily": 7.830188798479921e-05,
+     "max_dd": 0.22931968777080436,
+     "win_rate": 0.5446939674152356,
+     "avg_trade_ret": 0.0008291272460265263,
+     "avg_days_held": 1.7961250550418317,
+     "long_trades": 2271,
+     "short_trades": 0,
+     "long_net": 9744.521370846804,
+     "short_net": 0.0,
+     "liquidations": [],
+     "days": 8219,
+     "trading_days": 5668,
+     "orders_per_trading_day": 0.8013408609738885,
+     "share_days_with_order": 0.48306280875088214,
+     "share_days_in_market": 0.2994001411432604,
+     "fees_total": 13990.280072486237,
+     "slippage_total": 6399.055923739103,
+     "turnover_per_year": 1242596.9647055545
+    },
+    "weekly": {
+     "t": 1.622516042140952,
+     "n": 1175,
+     "mean": 0.0005397321275814128,
+     "sd": 0.011402713277815188,
+     "sharpe_ann": 0.34132786006225424
+    },
+    "stress_2x_mean_daily": -9.68509608942198e-05,
+    "stress_2x": {
+     "mean_daily": -9.68509608942198e-05,
+     "sharpe": -0.40683634370988875,
+     "total_return": -0.585592660775888,
+     "max_dd": 0.5859621663757426
+    },
+    "funding_mean_daily": 4.9578961754035405e-05,
+    "funding": {
+     "mean_daily": 4.9578961754035405e-05,
+     "sharpe": 0.20712083411914764,
+     "total_return": 0.37954760182635594,
+     "max_dd": 0.2687910425727046
+    },
+    "funding_cost_ann": 0.01048386807422879,
+    "stress_2x_plus_funding_mean_daily": -0.00012559929654192136,
+    "maker_first": {
+     "mean_daily": 0.00010320129998239,
+     "sharpe": 0.4295870520916354,
+     "total_return": 1.1423011633963576,
+     "max_dd": 0.2069232950587393,
+     "label": "X1-cost-v1, calibrated on Binance crypto majors in 2023, not TradFi books; a resting order also moves the fill off the close (information only)"
+    },
+    "fill_next_close": {
+     "mean_daily": -2.095300117335105e-05,
+     "sharpe": -0.07888102925872631,
+     "total_return": -0.24308350022518,
+     "max_dd": 0.4625046379332164
+    },
+    "fill_next_open": {
+     "mean_daily": 3.155992711353608e-05,
+     "sharpe": 0.12253206968384868,
+     "total_return": 0.17325679859733323,
+     "max_dd": 0.39589299780729925
+    },
+    "year_share": 0.3941529902977026,
+    "year_returns": {
+     "1993": -0.018677815263636287,
+     "1994": -0.0735356370623557,
+     "1995": -0.015684404899004065,
+     "1996": -0.029770928152472252,
+     "1997": 0.041198145707819725,
+     "1998": 0.04350529325743665,
+     "1999": 0.011351718576848288,
+     "2000": 0.11046472116779357,
+     "2001": -0.025946179537549158,
+     "2002": 0.08220651569784791,
+     "2003": 0.2536623665629559,
+     "2004": -0.040614699380014094,
+     "2005": -0.051953373005991337,
+     "2006": -0.03758536167291248,
+     "2007": 0.18670552929351578,
+     "2008": 0.06687012148956664,
+     "2009": 0.07451639682909843,
+     "2010": 0.10604040750388921,
+     "2011": 0.12796561494319048,
+     "2012": -0.04329005941340665,
+     "2013": 0.025889539786115377,
+     "2014": 0.018325618454329815,
+     "2015": -0.16808031353600097
+    },
+    "market_contrib": {
+     "SPYUSDT": 0.0016945801517286724,
+     "QQQUSDT": 0.18065258605029322,
+     "EWYUSDT": 0.4612160511450428
+    },
+    "markets_positive": 3,
+    "market_trades": {
+     "SPYUSDT": 930,
+     "QQQUSDT": 695,
+     "EWYUSDT": 646
+    },
+    "plateau": {
+     "0": true,
+     "4": true,
+     "3": true
+    },
+    "dsr_family": {
+     "sharpe_ann": 0.32693085346252143,
+     "T": 8219,
+     "psr0": 0.9409474285485053,
+     "dsr": 0.8475705842887078,
+     "n": 2.028341380619883,
+     "sharpe_needed_ann": 0.11227844129161083
+    },
+    "dsr_raw12": {
+     "sharpe_ann": 0.32693085346252143,
+     "T": 8219,
+     "psr0": 0.9409474285485053,
+     "dsr": 0.45447474553371375,
+     "n": 12.0,
+     "sharpe_needed_ann": 0.3508555911457887
+    },
+    "alpha_vs_ew": {
+     "beta": 0.21271821250554174,
+     "psr_alpha": 0.771332065653439,
+     "sharpe_alpha_ann": 0.1564193141074877,
+     "alpha_ann": 0.01166181334413441,
+     "days": 8219
+    },
+    "breakdowns": {
+     "by_vol_tercile": {
+      "tercile_0": {
+       "market_days": 792,
+       "mean": 0.0014058248590857736
+      },
+      "tercile_1": {
+       "market_days": 911,
+       "mean": 0.0025727188918612965
+      },
+      "tercile_2": {
+       "market_days": 1114,
+       "mean": 0.002495069882359489
+      },
+      "warmup": {
+       "market_days": 18,
+       "mean": 3.217113195910473e-05
+      }
+     },
+     "gap": {
+      "market_days": 600,
+      "mean": 0.0010485590498337557
+     },
+     "no_gap": {
+      "market_days": 2235,
+      "mean": 0.002509222236378101
+     },
+     "by_weekday": {
+      "0": {
+       "market_days": 526,
+       "mean": 0.0038869702447475707
+      },
+      "1": {
+       "market_days": 588,
+       "mean": 0.0030889383554743182
+      },
+      "2": {
+       "market_days": 609,
+       "mean": 0.002484866455526937
+      },
+      "3": {
+       "market_days": 552,
+       "mean": 0.0006071008048976677
+      },
+      "4": {
+       "market_days": 560,
+       "mean": 0.0009428601977317313
+      }
+     },
+     "account_monday_mean": -3.9424939360863875e-05,
+     "account_tue_fri_mean": 0.0001468699374402212
+    },
+    "null": {
+     "actual": 0.002200087170442791,
+     "null_mean": 0.0004580328336865419,
+     "null_sd": 0.00040929044752427814,
+     "null_p95": 0.0011122343677185066,
+     "p_value": 0.000999000999000999,
+     "n_draws": 1000,
+     "seed": 8008,
+     "held_dates": 1697,
+     "held_market_days": 2835,
+     "kept_in_place": 0,
+     "strata_used": 35
+    }
+   },
+   "IBS-LS": {
+    "config": {
+     "dir": "LS",
+     "theta": 0.2,
+     "hold": 1
+    },
+    "summary": {
+     "trades": 5051,
+     "trades_per_year": 224.31135174595448,
+     "total_return": -0.5310500234709206,
+     "cagr": -0.033070165892609915,
+     "sharpe": -0.2210900947032917,
+     "vol_ann": 0.1197519518160165,
+     "mean_daily": -7.253690511755374e-05,
+     "max_dd": 0.5864225362725766,
+     "win_rate": 0.5016828350821619,
+     "avg_trade_ret": -0.0003585777489932129,
+     "avg_days_held": 1.9000197980597902,
+     "long_trades": 2271,
+     "short_trades": 2780,
+     "long_net": 13289.704004963112,
+     "short_net": -5762.130958657579,
+     "liquidations": [],
+     "days": 8219,
+     "trading_days": 5668,
+     "orders_per_trading_day": 1.4904728299223713,
+     "share_days_with_order": 0.8091037402964009,
+     "share_days_in_market": 0.6739590684544813,
+     "fees_total": 27033.1519100457,
+     "slippage_total": 11369.818994104935,
+     "turnover_per_year": 2401046.4648172967
+    },
+    "weekly": {
+     "t": -1.0731834249853105,
+     "n": 1175,
+     "mean": -0.0005119900580772133,
+     "sd": 0.016353341447966782,
+     "sharpe_ann": -0.22576504169485107
+    },
+    "stress_2x_mean_daily": -0.00047303550673226944,
+    "stress_2x": {
+     "mean_daily": -0.00047303550673226944,
+     "sharpe": -1.4711675286762957,
+     "total_return": -0.9824683217207658,
+     "max_dd": 0.9824683217207658
+    },
+    "funding_mean_daily": -0.00014242666646239937,
+    "funding": {
+     "mean_daily": -0.00014242666646239937,
+     "sharpe": -0.43389413596537585,
+     "total_return": -0.7360442316126794,
+     "max_dd": 0.7364138500040802
+    },
+    "funding_cost_ann": 0.025509762890868655,
+    "stress_2x_plus_funding_mean_daily": -0.0005430096662221885,
+    "maker_first": {
+     "mean_daily": -1.5779981607233687e-05,
+     "sharpe": -0.04793032654382085,
+     "total_return": -0.25310557651718757,
+     "max_dd": 0.5248571479305029,
+     "label": "X1-cost-v1, calibrated on Binance crypto majors in 2023, not TradFi books; a resting order also moves the fill off the close (information only)"
+    },
+    "fill_next_close": {
+     "mean_daily": -0.0002946654281366868,
+     "sharpe": -0.8412692904915655,
+     "total_return": -0.9262308430324606,
+     "max_dd": 0.9379469552527222
+    },
+    "fill_next_open": {
+     "mean_daily": -0.00020468116325695758,
+     "sharpe": -0.5923050840155026,
+     "total_return": -0.8446151786190778,
+     "max_dd": 0.8704410170238973
+    },
+    "year_share": null,
+    "year_returns": {
+     "1993": -0.04733994939393219,
+     "1994": -0.11056472190389881,
+     "1995": -0.12277584542362525,
+     "1996": -0.11410167560175895,
+     "1997": -0.00343712063978081,
+     "1998": 0.025061839997009616,
+     "1999": -0.13304783700178677,
+     "2000": 0.18450418418560216,
+     "2001": 0.08274320450004422,
+     "2002": 0.1624652839121732,
+     "2003": 0.16226384875470615,
+     "2004": 0.02734490883561306,
+     "2005": -0.14684212385645487,
+     "2006": -0.15828191679936093,
+     "2007": 0.06161161763139558,
+     "2008": 0.207089025561592,
+     "2009": -0.08500858400704818,
+     "2010": 0.08450915611407298,
+     "2011": 0.03599773862229696,
+     "2012": -0.23111480278853974,
+     "2013": -0.10617520658335464,
+     "2014": -0.035105330612736144,
+     "2015": -0.33597651666340306
+    },
+    "market_contrib": {
+     "SPYUSDT": -0.9152501816889598,
+     "QQQUSDT": -0.291581908616005,
+     "EWYUSDT": 0.6106512671437904
+    },
+    "markets_positive": 1,
+    "market_trades": {
+     "SPYUSDT": 2118,
+     "QQQUSDT": 1521,
+     "EWYUSDT": 1412
+    },
+    "plateau": {
+     "6": false,
+     "10": false,
+     "9": true
+    },
+    "dsr_family": {
+     "sharpe_ann": -0.2210900947032917,
+     "T": 8219,
+     "psr0": 0.14813266740989606,
+     "dsr": 0.05763947184974458,
+     "n": 2.028341380619883,
+     "sharpe_needed_ann": 0.11227844129161083
+    },
+    "dsr_raw12": {
+     "sharpe_ann": -0.2210900947032917,
+     "T": 8219,
+     "psr0": 0.14813266740989606,
+     "dsr": 0.0034462837053837506,
+     "n": 12.0,
+     "sharpe_needed_ann": 0.3508555911457887
+    },
+    "alpha_vs_ew": {
+     "beta": 0.006532016879884403,
+     "psr_alpha": 0.1434432044369588,
+     "sharpe_alpha_ann": -0.22544383104939203,
+     "alpha_ann": -0.02699548919429375,
+     "days": 8219
+    },
+    "breakdowns": {
+     "by_vol_tercile": {
+      "tercile_0": {
+       "market_days": 2054,
+       "mean": 0.0005679546961429083
+      },
+      "tercile_1": {
+       "market_days": 2181,
+       "mean": 0.0014495900592543171
+      },
+      "tercile_2": {
+       "market_days": 2337,
+       "mean": 0.0015939171027153302
+      },
+      "warmup": {
+       "market_days": 43,
+       "mean": -0.00032129511590299703
+      }
+     },
+     "gap": {
+      "market_days": 1438,
+      "mean": 0.00018949286622086336
+     },
+     "no_gap": {
+      "market_days": 5177,
+      "mean": 0.0015002535643321414
+     },
+     "by_weekday": {
+      "0": {
+       "market_days": 1190,
+       "mean": 0.0023046008777778443
+      },
+      "1": {
+       "market_days": 1377,
+       "mean": 0.002148301177991752
+      },
+      "2": {
+       "market_days": 1374,
+       "mean": 0.000983509014953083
+      },
+      "3": {
+       "market_days": 1360,
+       "mean": 0.0008265186330279485
+      },
+      "4": {
+       "market_days": 1314,
+       "mean": -0.00010410125566265286
+      }
+     },
+     "account_monday_mean": -0.0003483461295259388,
+     "account_tue_fri_mean": -3.986001002719229e-05
+    },
+    "null": {
+     "actual": 0.0012153142016890558,
+     "null_mean": -6.782574210436957e-05,
+     "null_sd": 0.00026283611387263703,
+     "null_p95": 0.0003754103848314104,
+     "p_value": 0.000999000999000999,
+     "n_draws": 1000,
+     "seed": 8008,
+     "held_dates": 3820,
+     "held_market_days": 6615,
+     "kept_in_place": 0,
+     "strata_used": 36
+    }
+   }
+  }
+ },
+ "git_commit": "3572b6a9be1a67e455b6b27284939dd9b69f3a3e",
+ "code_sha256": "7efeb80cdda608058c4e62c4f40c8abe016094feb9443fe8575eeacfcd96cbe6",
+ "manifest_sha256": "d3db5b0c9f5afa084111c001b66def789163f2ed320fb9f47e7b7d76b59317fa",
+ "r6_manifest_sha256": "924c95eb0f1f048897ce3a3b97ed21f36bff6d2651c78a455951d7e3cb799559",
+ "data_report_sha256": "437e9c5e5cee3fb863723054045f99912540dec08cf69e604f8f7c915d9c3914",
+ "f1_daily_sha256": "3930e651a1ba298ab01425a93f3f0bc4dc57208af70f4ffb655d3feca4c49027",
+ "prereg_section_sha256": "bcbbc2f2dac99e6eea6c89a1b7f5e0ef8ae960032ac794379d19a4d8b5c04527",
+ "numpy_version": "2.4.6",
+ "numba_version": "0.68.0",
+ "pandas_version": "3.0.6",
+ "scipy_version": "1.17.1",
+ "pyarrow_version": "26.0.0",
+ "python_version": "3.11.8",
+ "n_eff_own_ratchet": 2.028341380619883,
+ "n_strict": 19.849570528171945,
+ "dsr_dev_strict_n": {
+  "IBS-L": {
+   "sharpe_ann": 0.32693085346252143,
+   "T": 8219,
+   "psr0": 0.9409474285485053,
+   "dsr": 0.3636740682083689,
+   "n": 19.849570528171945,
+   "sharpe_needed_ann": 0.3998690837091708
+  },
+  "IBS-LS": {
+   "sharpe_ann": -0.2210900947032917,
+   "T": 8219,
+   "psr0": 0.14813266740989606,
+   "dsr": 0.001675598324582896,
+   "n": 19.849570528171945,
+   "sharpe_needed_ann": 0.3998690837091708
+  }
+ },
+ "n_trials": 12,
+ "dev_info": {
+  "dsr_with_m1": {
+   "n_eff": 2.870166482571314,
+   "days": 8219,
+   "IBS-L": {
+    "sharpe_ann": 0.32693085346252143,
+    "T": 8219,
+    "psr0": 0.9409474285485053,
+    "dsr": 0.7693793462693879,
+    "n": 2.870166482571314,
+    "sharpe_needed_ann": 0.17279232432132502
+   },
+   "IBS-LS": {
+    "sharpe_ann": -0.2210900947032917,
+    "T": 8219,
+    "psr0": 0.14813266740989606,
+    "dsr": 0.03138743152623018,
+    "n": 2.870166482571314,
+    "sharpe_needed_ann": 0.17279232432132502
+   }
+  }
+ }
+}
