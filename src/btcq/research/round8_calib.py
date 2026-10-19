@@ -40,11 +40,13 @@ CALIB_CSV = ROOT / "research" / "round8" / "null_calibration.csv"
 CALIB_FILES = ["src/btcq/strategies/r8_ibs.py", "src/btcq/strategies/r6_macro.py", "src/btcq/features/ta.py",
                "src/btcq/research/round8_calib.py"]
 CAL_REPS = 1000
-CAL_DRAWS = 499
-CAL_SEED = 88
-CAL_MAX_P05 = 0.07          # every no-edge row, both rules: rejection at p < 0.05 at most 7%
-CAL_MAX_P025 = 0.035        # and at p < 0.025 (the gate's own threshold) at most 3.5%
-CAL_MIN_DETECT = 0.80       # the planted kappa = 0.10 edge must be rejected at p < 0.025 in >= 80% of panels, both rules
+# Owner decision 2026-10-20 (after the first calibration, seed 88 and 499 draws, failed varprem; before any data):
+# each primary's null gate is p < 0.01, and the rule is checked on a fresh calibration with a new seed.
+CAL_DRAWS = 1000            # the dev test's own draws: p < 0.01 means at most 9 of 1,000 draws >= actual
+CAL_SEED = 1088             # fresh: the failed calibration used 88
+CAL_GATE_P = 0.01           # the null gate of each primary
+CAL_MAX_P01 = 0.025         # every no-edge row, both rules: rejection at p < 0.01 at most 2.5% (half of 5%: 2 rules)
+CAL_MIN_DETECT = 0.80       # the planted kappa = 0.10 edge must be rejected at p < 0.01 in >= 80% of panels, both rules
 SCENARIOS = ("iid", "garch", "varprem", "regime", "factor", "weekend", "bull", "planted")
 # (scenario, planted kappa, replications, kind); the limits apply to every "no-edge" row
 CAL_ROWS = [("iid", 0.0, CAL_REPS, "no-edge"), ("garch", 0.0, CAL_REPS, "no-edge"),
@@ -238,8 +240,9 @@ def run_rows(draws: int = CAL_DRAWS, workers: int | None = None, chunk: int = 25
 
 
 def cmd_calibrate(draws: int = CAL_DRAWS, workers: int | None = None) -> pd.DataFrame:
-    """Rejection rates of the registered null (p < 0.05 and p < 0.025) on no-edge panels, for both primaries, and
-    detection of planted edges. Writes research/round8/null_calibration.csv."""
+    """Rejection rates of the registered null on no-edge panels for both primaries (the rule: <= 2.5% at the gate's
+    p < 0.01; the rates at p < 0.05 and p < 0.025 are reported), and detection of planted edges. Writes
+    research/round8/null_calibration.csv."""
     t0 = time.time()
     sha0 = calib_sha()
     ps = run_rows(draws, workers)
@@ -247,13 +250,14 @@ def cmd_calibrate(draws: int = CAL_DRAWS, workers: int | None = None) -> pd.Data
     for ri, (sc, kappa, reps, kind) in enumerate(CAL_ROWS):
         for k, rule in enumerate(R.PRIMARIES):
             x = ps[ri][:, k]
-            r05, r025 = float((x < 0.05).mean()), float((x < 0.025).mean())
-            ok = bool(r05 <= CAL_MAX_P05 and r025 <= CAL_MAX_P025) if kind == "no-edge" else None
+            r05, r025, r01 = (float((x < t).mean()) for t in (0.05, 0.025, CAL_GATE_P))
+            ok = bool(r01 <= CAL_MAX_P01) if kind == "no-edge" else None
             rows.append({"scenario": sc, "kind": kind, "rule": rule, "planted_edge": kappa, "reps": int(len(x)),
                          "draws": draws, "reject_05": r05, "se_05": float(np.sqrt(r05 * (1 - r05) / len(x))),
                          "reject_025": r025, "se_025": float(np.sqrt(r025 * (1 - r025) / len(x))),
-                         "mean_p": float(x.mean()), "limit_05": CAL_MAX_P05 if kind == "no-edge" else None,
-                         "limit_025": CAL_MAX_P025 if kind == "no-edge" else None, "ok": ok, "calib_sha256": sha0,
+                         "reject_01": r01, "se_01": float(np.sqrt(r01 * (1 - r01) / len(x))),
+                         "mean_p": float(x.mean()), "limit_01": CAL_MAX_P01 if kind == "no-edge" else None,
+                         "ok": ok, "calib_sha256": sha0,
                          **lib_versions_calib()})
     df = pd.DataFrame(rows)
     if calib_sha() != sha0:
@@ -267,6 +271,6 @@ def cmd_calibrate(draws: int = CAL_DRAWS, workers: int | None = None) -> pd.Data
     if len(bad):
         print("NO-EDGE ROWS ABOVE THE LIMIT: " + ", ".join(f"{a}/{b}" for a, b in zip(bad["scenario"], bad["rule"])))
     det = df[(df["kind"] == "planted edge") & (df["planted_edge"] == max(e for _, e, _, _ in CAL_ROWS))]
-    if not (det["reject_025"] >= CAL_MIN_DETECT).all():
+    if not (det["reject_01"] >= CAL_MIN_DETECT).all():
         print(f"THE PLANTED EDGE (kappa 0.10) IS DETECTED IN FEWER THAN {CAL_MIN_DETECT:.0%} OF PANELS")
     return df

@@ -1,6 +1,6 @@
 """Round 8 (IBS): daily IBS mean reversion (Pagonidis 2014) on the SPY, QQQ and EWY proxies of Binance TradFi perps,
-two co-primaries (IBS-L, IBS-LS), judged under the practical rulebook plus the round's own gates (alpha, Bonferroni
-null). See research/PREREGISTRATION.md, Round 8.
+two co-primaries (IBS-L, IBS-LS), judged under the practical rulebook plus the round's own gates (alpha, and the
+null at p < 0.01 per primary). See research/PREREGISTRATION.md, Round 8.
 
     python -m btcq.research.run r8-calibrate                     # synthetic, before any data
     python -m btcq.research.run r8-power                         # synthetic, before any data
@@ -28,8 +28,8 @@ from btcq.data import external_ohlc as X
 from btcq.data import store
 from btcq.research import guards, registry
 from btcq.research.round5 import Window, _dsr
-from btcq.research.round8_calib import (CAL_DRAWS, CAL_MAX_P025, CAL_MAX_P05, CAL_MIN_DETECT, CAL_ROWS, CALIB_CSV,  # noqa: F401
-                                        calib_sha, cmd_calibrate, lib_versions_calib)
+from btcq.research.round8_calib import (CAL_DRAWS, CAL_GATE_P, CAL_MAX_P01, CAL_MIN_DETECT, CAL_ROWS,  # noqa: F401
+                                        CALIB_CSV, calib_sha, cmd_calibrate, lib_versions_calib)
 from btcq.research.run import RESULTS, _save_json
 from btcq.strategies import r8_ibs as R
 
@@ -70,7 +70,7 @@ MIN_TRADES = 100
 MAX_YEAR_SHARE = 0.65
 MIN_DSR = 0.95
 MIN_ALPHA_PSR = 0.95
-MAX_NULL_P = 0.025                       # two co-primaries: Bonferroni 0.05 / 2
+MAX_NULL_P = CAL_GATE_P                  # 0.01: owner decision 2026-10-20, after the first calibration failed
 MIN_MARKETS_POSITIVE = 2
 HOLDOUT_SHARPE_FRAC = 0.5
 HOLDOUT_ALPHA_FRAC = 0.5
@@ -416,7 +416,7 @@ def _gates_dev(rec: dict) -> dict:
     return {"trades>=100": rec["summary"]["trades"] >= MIN_TRADES,
             "2x-cost mean daily>0": rec["stress_2x_mean_daily"] > 0,
             "funding-stress mean daily>0": rec["funding_mean_daily"] > 0,
-            "null p<0.025": rec["null"]["p_value"] < MAX_NULL_P,
+            "null p<0.01": rec["null"]["p_value"] < MAX_NULL_P,
             "DSR>=0.95 at the family N_eff": rec["dsr_family"]["dsr"] >= MIN_DSR,
             "alpha PSR>=0.95 vs the account-scaled hold": rec["alpha_vs_ew"]["psr_alpha"] >= MIN_ALPHA_PSR,
             "best year<=65%": rec["year_share"] <= MAX_YEAR_SHARE,
@@ -522,7 +522,7 @@ def data_report() -> pd.DataFrame:
 
 def calibration_problems(cal: pd.DataFrame) -> list[str]:
     """The committed calibration must be the registered one, run by the current calibration code, and pass."""
-    if not {"scenario", "kind", "rule", "planted_edge", "reps", "draws", "reject_05", "reject_025", "ok",
+    if not {"scenario", "kind", "rule", "planted_edge", "reps", "draws", "reject_01", "ok",
             "calib_sha256"} <= set(cal.columns):
         return ["the calibration file is not in the registered format"]
     probs = []
@@ -533,11 +533,11 @@ def calibration_problems(cal: pd.DataFrame) -> list[str]:
     if not cal["calib_sha256"].eq(calib_sha()).all():
         probs.append("the calibration was run by other calibration code")
     no_edge = cal[cal["kind"] == "no-edge"]
-    within = (no_edge["reject_05"] <= CAL_MAX_P05) & (no_edge["reject_025"] <= CAL_MAX_P025)
+    within = no_edge["reject_01"] <= CAL_MAX_P01
     if not len(no_edge) or not no_edge["ok"].astype(str).eq("True").all() or not within.all():
         probs.append("a no-edge calibration row is above its limit")
     det = cal[(cal["kind"] == "planted edge") & (cal["planted_edge"].astype(float) == max(e for _, e, _, _ in CAL_ROWS))]
-    if not len(det) or not (det["reject_025"] >= CAL_MIN_DETECT).all():
+    if not len(det) or not (det["reject_01"] >= CAL_MIN_DETECT).all():
         probs.append("the planted edge (kappa 0.10) is not detected")
     vers = lib_versions_calib()
     if any(k not in cal or not cal[k].astype(str).eq(v).all() for k, v in vers.items()):
@@ -921,7 +921,7 @@ def cmd_sweep(rerun: bool = False, n_draws: int = N_DRAWS) -> dict:
         r = {"code": CODE, "name": meta.name, "tf": "1d", "version": v, "round": 8, "hypothesis": meta.hypothesis,
              "rules": meta.rules, "configs": R.CONFIGS, "primaries": R.PRIMARIES, "neighbours": R.NEIGHBOURS,
              "markets": R.MARKETS, "holdout_scope": "clean (general-knowledge and planning-snippet disclosures)",
-             "rulebook": "practical (Amendments 1 and 2) + Round 8 gates (alpha, null p < 0.025)",
+             "rulebook": "practical (Amendments 1 and 2) + Round 8 gates (alpha, null p < 0.01)",
              "start": str(DEV.start.date()), "end": str((DEV.end - DAY).date()), "full_book_day": fb,
              "dev": dev, "candidate": cand, "dev_pass_any": cand is not None, "n_eff_family": ev["n_eff_family"],
              "holdout_bootstrap": {"n": BOOT_N, "block": BOOT_BLOCK, "seed": BOOT_SEED, "n_out": len(HOLD.calendar),

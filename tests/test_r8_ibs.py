@@ -255,5 +255,7 @@ def test_registered_calibration_rows():
     kinds = [(sc, kind) for sc, _, _, kind in C.CAL_ROWS]
     assert [sc for sc, k in kinds if k == "no-edge"] == ["iid", "garch", "varprem", "regime", "factor", "weekend"]
     assert all(reps == 1000 for _, _, reps, kind in C.CAL_ROWS if kind == "no-edge")
-    assert C.CAL_DRAWS == 499 and C.CAL_MAX_P05 == 0.07 and C.CAL_MAX_P025 == 0.035
+    from btcq.research import round8 as r8
+    assert C.CAL_DRAWS == r8.N_DRAWS == 1000 and C.CAL_GATE_P == r8.MAX_NULL_P == 0.01   # the gated test exactly
+    assert C.CAL_MAX_P01 == 0.025 and C.CAL_SEED != 88
     assert [e for sc, e, _, _ in C.CAL_ROWS if sc == "planted"] == [0.05, 0.10]

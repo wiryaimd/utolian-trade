@@ -26,7 +26,7 @@ def synth(seed=0, scenario="garch", kappa=0.0, n_days=2600):
 @pytest.fixture(scope="module")
 def ev():
     mk, w = synth(scenario="planted", kappa=0.10)
-    return mk, w, r8.evaluate(mk, w, n_draws=99)
+    return mk, w, r8.evaluate(mk, w, n_draws=199)       # 199 draws: p can fall below 0.01
 
 
 # ---------------------------------------------------------------- the account and the evaluation
@@ -48,7 +48,7 @@ def test_account_is_the_sum_of_three_sleeves_over_three(ev):
 def test_planted_edge_passes_the_null_and_costs_are_ordered(ev):
     _, _, e = ev
     for name, rec in e["primaries"].items():
-        assert rec["null"]["p_value"] < 0.025
+        assert rec["null"]["p_value"] < 0.01
         assert rec["stress_2x_mean_daily"] < rec["summary"]["mean_daily"]
         assert rec["funding_mean_daily"] < rec["summary"]["mean_daily"]
         assert rec["stress_2x_plus_funding_mean_daily"] < rec["stress_2x_mean_daily"]
@@ -107,7 +107,7 @@ def test_ew_benchmark_is_scaled_like_the_account():
 
 def fake_rec(**kw):
     rec = {"summary": {"trades": 100}, "stress_2x_mean_daily": 1e-9, "funding_mean_daily": 1e-9,
-           "null": {"p_value": 0.0249}, "dsr_family": {"dsr": 0.95}, "alpha_vs_ew": {"psr_alpha": 0.95},
+           "null": {"p_value": 0.0099}, "dsr_family": {"dsr": 0.95}, "alpha_vs_ew": {"psr_alpha": 0.95},
            "year_share": 0.65, "plateau": {"1": True, "2": True, "3": True}, "markets_positive": 2}
     for k, v in kw.items():
         rec[k] = v
@@ -117,7 +117,7 @@ def fake_rec(**kw):
 def test_dev_gates_pass_exactly_at_the_thresholds():
     assert all(r8.gates_dev(fake_rec()).values())
     for kw in ({"summary": {"trades": 99}}, {"stress_2x_mean_daily": 0.0}, {"funding_mean_daily": 0.0},
-               {"null": {"p_value": 0.025}}, {"dsr_family": {"dsr": 0.9499}}, {"alpha_vs_ew": {"psr_alpha": 0.9499}},
+               {"null": {"p_value": 0.01}}, {"dsr_family": {"dsr": 0.9499}}, {"alpha_vs_ew": {"psr_alpha": 0.9499}},
                {"year_share": 0.6501}, {"plateau": {"1": True, "2": False, "3": True}}, {"markets_positive": 1}):
         g = r8.gates_dev(fake_rec(**kw))
         assert sum(not x for x in g.values()) == 1, kw
@@ -257,8 +257,9 @@ def cal_frame(**over):
     for sc, kappa, reps, kind in C.CAL_ROWS:
         for rule in R.PRIMARIES:
             rows.append({"scenario": sc, "kind": kind, "rule": rule, "planted_edge": kappa, "reps": reps,
-                         "draws": C.CAL_DRAWS, "reject_05": 0.9 if kind == "planted edge" else 0.05,
-                         "reject_025": 0.9 if kind == "planted edge" else 0.02,
+                         "draws": C.CAL_DRAWS, "reject_05": 0.9 if kind == "planted edge" else 0.08,
+                         "reject_025": 0.9 if kind == "planted edge" else 0.04,
+                         "reject_01": 0.9 if kind == "planted edge" else 0.02,
                          "ok": True if kind == "no-edge" else None, "calib_sha256": C.calib_sha(),
                          **C.lib_versions_calib()})
     df = pd.DataFrame(rows)
@@ -270,14 +271,14 @@ def cal_frame(**over):
 def test_calibration_guard():
     assert r8.calibration_problems(cal_frame()) == []
     assert any("above its limit" in p for p in r8.calibration_problems(cal_frame(ok=False)))
-    assert any("above its limit" in p for p in r8.calibration_problems(cal_frame(reject_05=0.0701)))   # recomputed
-    assert any("above its limit" in p for p in r8.calibration_problems(cal_frame(reject_025=0.0351)))
-    assert r8.calibration_problems(cal_frame(reject_05=0.07, reject_025=0.035)) == []                    # inclusive
+    assert any("above its limit" in p for p in r8.calibration_problems(cal_frame(reject_01=0.0251)))   # recomputed
+    assert r8.calibration_problems(cal_frame(reject_01=0.025)) == []                                     # inclusive
+    assert r8.calibration_problems(cal_frame(reject_05=0.2, reject_025=0.1)) == []       # reported only, not limits
     assert any("other calibration code" in p for p in r8.calibration_problems(cal_frame(calib_sha256="x")))
     assert any("registered scenarios" in p for p in r8.calibration_problems(cal_frame(reps=999)))
     assert any("library versions" in p for p in r8.calibration_problems(cal_frame(numpy_version="0.0")))
     weak = cal_frame()
-    weak.loc[(weak["planted_edge"] == 0.10) & (weak["rule"] == "IBS-L"), "reject_025"] = 0.79
+    weak.loc[(weak["planted_edge"] == 0.10) & (weak["rule"] == "IBS-L"), "reject_01"] = 0.79
     assert any("not detected" in p for p in r8.calibration_problems(weak))
     assert r8.calibration_problems(pd.DataFrame({"a": [1]})) == ["the calibration file is not in the registered format"]
 
