@@ -290,7 +290,8 @@ def main() -> None:
                                     "r4-validate", "r5-power", "r5-download-spot", "r5-sweep", "r5-validate",
                                     "r5-d1-info",
                                     "r6-power", "r6-download", "r6-sweep", "r6-validate",
-                                    "r7-power", "r7-calibrate", "r7-download", "r7-sweep", "r7-validate"])
+                                    "r7-power", "r7-calibrate", "r7-download", "r7-sweep", "r7-validate",
+                                    "x1-start", "x1-stage-a", "x1-download", "x1-stage-b", "x1-report"])
     ap.add_argument("--strategy", default="all")
     ap.add_argument("--finalists", action="store_true")
     ap.add_argument("--unlock-holdout", action="store_true")
@@ -300,6 +301,8 @@ def main() -> None:
     ap.add_argument("--keep-raw", action="store_true", help="r4-download: keep raw kline zips")
     ap.add_argument("--rerun", action="store_true", help="r4-sweep: overwrite results (needs a version bump)")
     ap.add_argument("--resume", action="store_true", help="r6/r7-download: fill missing markets only")
+    ap.add_argument("--set", dest="tick_set", choices=["B1", "B2"], default=None, help="x1-download / x1-stage-b")
+    ap.add_argument("--dry-run", action="store_true", help="x1-download: list the archives and sizes only")
     a = ap.parse_args()
     codes = [s.code for s in ALL] if a.strategy == "all" else a.strategy.split(",")
     if a.cmd == "download":
@@ -392,6 +395,20 @@ def main() -> None:
                 raise SystemExit("r7-validate needs --unlock-holdout")
             round7.cmd_validate(a.reason if a.reason != ap.get_default("reason")
                                 else "Round 7 holdout (pre-registered)")
+    elif a.cmd.startswith("x1-"):
+        from btcq.research import x1_execution as x1
+        if a.cmd in ("x1-download", "x1-stage-b") and a.tick_set is None:
+            raise SystemExit(f"{a.cmd} needs --set B1 or --set B2")
+        if a.cmd == "x1-start":
+            x1.cmd_start()
+        elif a.cmd == "x1-stage-a":
+            x1.cmd_stage_a()
+        elif a.cmd == "x1-download":
+            x1.cmd_download(a.tick_set, dry_run=a.dry_run)
+        elif a.cmd == "x1-stage-b":
+            x1.cmd_stage_b(a.tick_set)
+        elif a.cmd == "x1-report":
+            x1.cmd_report()
     elif a.cmd == "report":
         from btcq.research import report
         print(report.build())

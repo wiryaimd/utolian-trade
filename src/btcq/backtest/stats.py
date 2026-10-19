@@ -359,3 +359,23 @@ def power_table_practical(sharpes=(0.0, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0), n_sims:
                         float((expected_max_sr(v0, n) + norm.ppf(0.95) / np.sqrt(dev_days - 1)) * np.sqrt(365)),
                         "p_dev": k[n][0] / n_sims, "p_pass": k[n][1] / n_sims})
     return out
+
+
+def block_bootstrap_means(x, n_sims: int = 10_000, block: int = 30, seed: int = 11) -> np.ndarray:
+    """Circular moving-block bootstrap of the mean of x: each draw is len(x) values built from blocks of `block`
+    consecutive values (wrapping past the end) at uniform starts, from numpy's Generator(PCG64(seed)). The chunking
+    depends only on len(x) and block, so the draws are the same for a given (x, n_sims, block, seed)."""
+    x = np.asarray(x, dtype=np.float64)
+    n = x.size
+    if n == 0 or block < 1 or n_sims < 1:
+        raise ValueError("block_bootstrap_means needs a non-empty x, block >= 1 and n_sims >= 1")
+    rng = np.random.Generator(np.random.PCG64(seed))
+    nb = -(-n // block)
+    step = max(1, 2_000_000 // (nb * block))
+    out = np.empty(n_sims)
+    for s in range(0, n_sims, step):
+        m = min(step, n_sims - s)
+        starts = rng.integers(0, n, size=(m, nb))
+        idx = ((starts[:, :, None] + np.arange(block)) % n).reshape(m, -1)[:, :n]
+        out[s:s + m] = x[idx].mean(axis=1)
+    return out
