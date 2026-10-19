@@ -2005,3 +2005,564 @@ higher savings (random T = 15: 2.63 bp).
   move. A round trip costs roughly 10–12 bp instead of 13.2 bp. That helps, but it does not change the arithmetic
   for a strategy whose edge is a few bp per trade, and the screen found no earlier fast family in that band.
 - **For F1:** the effect is worth roughly $30–100 a year on $10,000. The paper bot stays taker as registered.
+
+## Round 8 (IBS) — registered 2026-10-20, before any Round 8 data is loaded and before any Round 8 backtest
+
+**Why.** The owner wants more frequent trading. The current state:
+- F1 is the only strategy with a clean passing holdout.
+- D1 is in a forward paper test.
+- Rounds 4–7 and X1 failed or closed.
+- Short-term mean reversion in crypto is closed: S7, S8, F5 and F6 earned at or below costs.
+
+The equity-index markets were never tried for mean reversion. Round 6 tested only trend (M1) on the TradFi proxies, M1
+failed dev, and their 2016-01-01 → 2026-09-30 holdout was never opened.
+
+Round 8 asks whether a published daily mean-reversion rule, fixed before any data, survives:
+- Binance perp costs;
+- a random-timing null;
+- an alpha test against buy-and-hold.
+
+**Owner decisions.**
+- **2026-10-19, in planning, before any data** (plan `C:\Users\adnya\.claude\plans\floofy-crafting-pony.md`):
+  - Long-only and long-short are both tested, as two co-primaries, each judged on its own gates.
+  - The universe is SPY, QQQ and EWY only, so the commodity markets' 2016+ holdout stays clean.
+  - The holding period is 1 day, the source paper's rule.
+  - Approving the plan also approved the round's own gates, including **alpha as a gate**, which the practical
+    rulebook lists as reported only.
+- **2026-10-20, after the first null calibration failed and before any data** (owner's words): "Option A: keep the null
+  and scenarios, require p < 0.01 per primary, with every no-edge row <= 2.5% at p < 0.01 on a fresh calibration (new
+  seed) before registering." See Null calibration below.
+
+**Code:** commit `1aff072`.
+- **New:**
+  - `src/btcq/data/external_ohlc.py`;
+  - `src/btcq/strategies/r8_ibs.py`, which holds the rule and the null;
+  - `src/btcq/backtest/daily_sim.py`;
+  - `src/btcq/research/round8.py`;
+  - `src/btcq/research/round8_calib.py`;
+  - `tests/test_external_ohlc.py`, `test_daily_sim.py`, `test_r8_ibs.py` and `test_round8.py`.
+- **Changed:** `run.py` (the `r8-*` verbs) and `.gitattributes`.
+- **Unchanged:** `engine.py`, `external.py` and `stats.py`.
+- **Pins:** the 18 files in `round8.CODE_FILES` are hashed at the sweep start and checked before the holdout.
+- **Tests:** 673 tests pass at that commit.
+
+### Rule
+Source: Pagonidis, "The IBS Effect: Mean Reversion in Equity ETFs", NAAIM 2014.
+
+At each trade date t of a market (its own rows), IBS_t = (C_t − L_t) / (H_t − L_t). IBS is undefined, so there is no
+signal, when H ≤ L or when H, L or C is missing.
+- **IBS-L:** go long at the close of t if IBS_t ≤ 0.20 and hold to the next trade date's close. The position is renewed
+  while the signal repeats; otherwise it is exited at that close.
+- **IBS-LS:** IBS-L plus a short at the close of t if IBS_t ≥ 0.80, held and renewed the same way. A switch between long
+  and short is a flip at the same close.
+- **Sizing (Round 6's):** min(0.25 / σ, 2.0) × the sleeve's equity at entry or flip.
+  - σ = the standard deviation (ddof 0) of the last 90 daily log returns of the market's own closes × √252.
+  - There is no position until σ exists.
+  - A renewed position is never resized.
+- **Grid (12 configs, used only for N_eff, the plateau and PBO):**
+  - direction {L, LS} × θ {0.15, 0.20, 0.25} × hold h {1, 2};
+  - LS shorts at IBS ≥ 1 − θ;
+  - with h = 2 the position follows the latest non-zero signal of the last 2 closes, and is flat if there is none.
+- **Primaries (fixed): IBS-L = (L, 0.20, 1) and IBS-LS = (LS, 0.20, 1).**
+  - The plateau neighbours of each are θ 0.15 and θ 0.25 at h = 1, and θ 0.20 at h = 2, in the same direction.
+  - Nothing is selected from the grid.
+
+### Data (no download)
+| Perp | Proxy | First date | Slippage per side |
+|---|---|---|---|
+| SPYUSDT | SPY | 1993-01-29 | 3 bp |
+| QQQUSDT | QQQ | 1999-03-10 | 2 bp |
+| EWYUSDT | EWY | 2000-05-12 | 2 bp |
+
+- **Source:** Round 6's raw Yahoo chart files (`data/external/raw/yahoo/{SPY,QQQ,EWY}_20261016T*.json`). Their SHA256s
+  are pinned in `research/round6/data_manifest.csv`. The slippage tiers are Round 6's 2026-10-16 snapshot.
+- **Parser** `external_ohlc.parse_yahoo_ohlc`:
+  - it applies `external.parse_yahoo`'s date rules: exchange-local trade dates; a bar stamped 17:00 local or later
+    belongs to the next weekday; the unfinished bar of the download day and null closes are dropped; of duplicate dates
+    the last is kept;
+  - it keeps open, high and low (NaN when Yahoo gives null);
+  - each of these is a hard error:
+    - its (date, close) rows differ from `parse_yahoo`'s;
+    - a raw file's SHA256 differs from Round 6's manifest;
+    - after Round 6's cleaning, any (date, close) differs from Round 6's verified parquet, row for row.
+- **Outputs:**
+  - derived parquets under `data/external/ohlc/`, not committed;
+  - `research/round8/data_manifest.csv` (the raw, Round 6 parquet and derived parquet SHA256s and the row counts),
+    committed and checked on every load together with Round 6's manifest pins.
+- **Lock:**
+  - Dev loads return only rows dated before 2016-01-01.
+  - The holdout (2016-01-01 → 2026-09-30) needs Round 8's own unlock (`external_ohlc.unlock_r8`). It writes a
+    structured `round: 8` record tagged `[R8:` in `research/holdout_log.jsonl`.
+  - Round 8's loader can load only these 3 markets. It never unlocks the crypto 2024+ data or Round 6's other markets.
+- **Blind data report** (`research/round8/data_report.csv`), committed before the sweep start record:
+  - holdout rows give only counts: rows, null open/high/low, OHLC consistency violations, and days with H = L;
+  - dev rows also get range checks;
+  - rows after 2026-09-30 are only counted.
+- **Red flags.** Any one stops the round until a dated amendment:
+  1. a raw-file SHA256 or a close differs from Round 6 (raised while building);
+  2. null H or L on more than 0.5% of the rows with a close;
+  3. L ≤ min(O, C) ≤ max(O, C) ≤ H fails, with a relative tolerance of 1e-6, on more than 0.1% of rows;
+  4. H = L on more than 1% of dev rows;
+  5. any dev row with (H − L) / C > 30%. Dev rows between 15% and 30% are listed.
+- IBS does not change with split adjustments, because Yahoo adjusts O, H, L and C alike. Closes are not
+  dividend-adjusted, as in Round 6 and as for a perp holder.
+
+### Execution, account and costs
+- **Fills:** a decision at trade date t's close fills at C_t, the same close (`daily_sim.simulate`, lag 0).
+  - Reported only, never trials: a fill at the next open O_{t+1} and at the next close C_{t+1} (lag 1).
+  - A decision at the window's last close is not opened, because it would be held past the window. An open position is
+    closed there.
+- **Simulator** (`src/btcq/backtest/daily_sim.py`):
+  - signed positions, sized at entry or flip only;
+  - fees and slippage on every fill;
+  - daily marks at each close;
+  - Round 6's liquidation rule: equity ≤ 0 or notional ≥ 20× equity at a mark, or an exit that leaves the cash ≤ 0,
+    closes the sleeve at max(equity, 0), and it stays flat. It is never expected.
+  - **With lag 1 it reproduces `engine.run` on close-only rows to 1e-12:** trades, fees and daily marks, tested on
+    fuzzed paths.
+- **Account (one per primary):**
+  - 3 slots of $10,000 / 3, each compounding its own sleeve;
+  - the account's daily return = the sum of the slots' daily returns / 3, on the UTC calendar;
+  - days without trading, and markets that aren't ready yet, count as 0;
+  - Sharpe is annualised with √365.
+- **Costs:**
+  - **base:** 5 bp taker plus the slippage tier, per side, on every fill;
+  - **2×:** fees and slippage doubled;
+  - funding is 0 in the base case.
+  - **Funding stress:** 5%/yr on |notional / equity| at the previous trade date's mark, over the calendar days since it
+    (Mondays carry 3), long or short. It is subtracted from the sleeve's daily return (floored at −100%), as Round 6's
+    drag.
+  - Reported only: 2× costs plus funding together.
+  - Reported only: **maker-first**, from `research/x1/x1_cost_v1.csv` (T = 15, ALL).
+    - Entries use the reversion class, 6.18 bp per side against the 6.6 bp taker (−0.42 bp).
+    - Exits use the random class, 4.89 bp (−1.71 bp).
+    - Labelled *calibrated on Binance crypto majors in 2023, not TradFi books; a resting order also moves the fill off
+      the close*.
+
+### Windows
+- **Dev:** 1993-07-01 → 2015-12-31, 8,219 calendar days.
+  - Each market trades once σ exists: SPY from the start, QQQ from about 1999-07-19, EWY from about 2000-09-20 (the
+    source first dates + 90 NYSE trading days).
+  - That is 18.1 full-book years of 22.5.
+- **Holdout:** 2016-01-01 → 2026-09-30, 3,926 days, one shot.
+  - Positions start in sync with the signal: the state machine runs on all loaded rows, and the first executed decision
+    is the first holdout trade date's close.
+
+### Null: date-level relocation of held days
+- **The unit:** a decision date d of the union trade-date grid, with its position vector over the 3 markets. Each entry
+  is the market's side, or 0.
+- **Each draw** moves every held date, whole vector at once, to a date d′ drawn uniformly with replacement from the
+  eligible dates of d's stratum, and re-sizes there with σ_{m,d′}.
+- **Strata (date level):**
+  - **era:** the set of markets whose σ exists;
+  - **volatility:** the EWMA volatility tercile (λ = 0.94) of the slot-scaled equal-weight index, with terciles within
+    each era. The index's daily return is the sum of the markets' close-to-close returns / 3;
+  - **trend:** the index above or below its 200-day SMA;
+  - **gap:** whether the next trade date is at least 2 calendar days away (a weekend or holiday follows);
+  - dates before the EWMA (30 index returns) and the SMA (200 grid rows) exist form their own volatility/trend cell,
+    still split by era and gap.
+- **Eligible destinations:** window dates, excluding the window's last date, on which every ready market has a row, σ
+  and a next close inside the window.
+- **Statistic:** the mean over held market-days of side × min(0.25 / σ_{m,d}, 2) × the next close-to-close simple return,
+  at zero cost. That is the account's gross P&L sized on each day; costs are the same in every draw.
+- **Settings:**
+  - 1,000 draws, seed 8008 (numpy's PCG64);
+  - p = (1 + #{null ≥ actual}) / 1,001;
+  - **each primary needs p < 0.01** (owner decision 2026-10-20; see Null calibration).
+- **Unit tests:** the identity draw reproduces the statistic exactly and gives p = 1, and a draw keeps each date's
+  position vector whole and inside its stratum.
+- **What it controls for:** the drift (beta), volatility regimes, trend regimes and the weekend, by stratum. The alpha
+  gate checks beta separately.
+- **What it does not:** real predictability that comes from noise in the closing print (bid-ask bounce, auction
+  imbalance, EWY's premium to a stale NAV). See Disclosures.
+- **Known small bias** (found by the code review; disclosed, not changed):
+  - A pool date e carries the next return r_{e+1}, which also decides whether e+1 is a held low-IBS date, and e and e+1
+    usually share a stratum.
+  - So the pools of strata with many held dates have slightly depressed means. The null is centred about 0.07–0.14 null
+    standard deviations too low, which makes the test slightly liberal.
+  - The calibration measures the null with this bias included.
+  - IBS-L's null is also somewhat conservative: the z spread is about 0.85–0.9, because held dates are a
+    without-replacement quarter of their strata while the null draws with replacement.
+
+### Null calibration
+The rule, fixed in the approved plan before any calibration: in every no-edge scenario, for both rules, the rejection
+rate must be ≤ 7% at p < 0.05 and ≤ 3.5% at p < 0.025 (the gate's threshold then).
+
+**The first calibration failed** (seed 88, 499 draws, 1,000 panels per no-edge scenario; code commit `ea9c569`; the file
+is in that commit):
+- 5 of the 6 no-edge scenarios passed for both rules.
+- **varprem** failed:
+  - IBS-L 7.5% at p < 0.05 (3.4% at p < 0.025);
+  - IBS-LS 8.7% at p < 0.05 and 4.5% at p < 0.025.
+- The other rows at p < 0.05 / p < 0.025:
+
+  | Scenario | IBS-L | IBS-LS |
+  |---|---|---|
+  | iid | 1.9% / 0.6% | 4.7% / 2.5% |
+  | garch | 2.9% / 1.2% | 4.5% / 2.5% |
+  | regime | 2.4% / 0.8% | 4.1% / 2.2% |
+  | factor | 2.3% / 0.8% | 4.8% / 2.4% |
+  | weekend | 3.6% / 1.3% | 4.6% / 2.3% |
+
+- The planted κ = 0.10 edge was detected 99.5% / 100% of the time.
+- **Why varprem fails:** the expected return rises with each market's own conditional variance, and in this scenario
+  each market has its own GJR volatility. A low-IBS day raises that market's next-day variance, and so its expected
+  return. The date-level strata cannot see one market's own variance.
+- **Diagnostics on the same panels** (information, run after the failure):
+  - splitting the strata by grid-row parity or by weekday would remove the small bias above, but IBS-LS still failed
+    (7.0–7.2% / 3.6–3.7%);
+  - at p < 0.01 every row was at or below 2.5% (varprem 0.7% / 2.1%, iid 0.2% / 0.8%).
+
+**Owner decision (2026-10-20):** keep the null and the scenarios. Each primary's null gate becomes p < 0.01. The new
+rule: every no-edge row, for both rules, must reject at most 2.5% at p < 0.01 (the Bonferroni share of a 5% family error
+for the two primaries) on a fresh calibration with a new seed. The rates at p < 0.05 and p < 0.025 are reported only,
+because the test no longer uses those levels.
+
+**The registered calibration** (`r8-calibrate` at commit `1aff072`, `research/round8/null_calibration.csv`):
+- seed 1088, 999 draws (at 999 draws, p < 0.01 means at most 8 draws at or above the actual, nominal 0.9%; the dev test
+  at 1,000 draws is nominal 0.999%);
+- 1,000 panels per no-edge scenario, 400 for the bull row, 200 per planted κ;
+- the registration commands refuse to run unless the committed calibration meets the rule, was run by the current
+  calibration code (`707d15e6b847544e2d114c8bb318d95fbc5c09703f69fd6723b7678436a40450`: `r8_ibs.py`, `r6_macro.py`, `ta.py`, `round8_calib.py`) under the same numpy, pandas,
+  numba and Python versions, and detects the planted κ = 0.10 edge at p < 0.01 in at least 80% of panels for both rules.
+
+**Generator:**
+- Each market's daily simple return is R = μ_t + σ_t z, so the expected simple return is μ_t on every day by
+  construction (Round 7's lesson).
+- The day is one Brownian bridge in log price from the previous close to log(1 + R). The first step, the overnight gap,
+  carries 25% of the variance. Then 78 equal intraday steps run from the open to the close, so H and L are the path's
+  extremes.
+- Daily volatilities are 1.2%, 1.7% and 2.1%.
+- Panels follow the dev ramp: market 0 alone, then markets 1 and 2 ready about 6.0 and 7.2 years into about 5,595 window
+  days, on a Monday–Friday calendar. Returns are clipped at −50%.
+
+| Scenario | What it is |
+|---|---|
+| iid | constant volatility, drift 3 bp/day, Gaussian shocks, independent markets |
+| garch | GJR-GARCH (ω 0.02, α 0.03, γ 0.10, β 0.90) with unit-variance t(4) shocks, independent markets |
+| varprem | garch, with an expected return of 3 bp + 3 σ_t²: low-IBS days predict higher volatility and so a higher return |
+| regime | a market-wide bull/bear drift of ±8 bp/day, switching with probability 1/252 a day |
+| factor | one factor (loadings 0.95 / 0.895 / 0.737: ρ 0.85, 0.70, 0.66) with a common GJR variance and t(4) shocks; shared intraday paths, so IBS signals coincide across markets |
+| weekend | after a weekend: 3× the daily variance (the extra variance overnight) and a −5 bp drift |
+| bull (information) | drift 8 bp/day |
+| planted (power) | factor + regime, plus +κσ_t after IBS ≤ 0.2 and −κσ_t after IBS ≥ 0.8, κ ∈ {0.05, 0.10} |
+
+| Scenario | Kind | Panels | IBS-L p < 0.01 (s.e.) | IBS-L p < 0.025 / 0.05 | IBS-LS p < 0.01 (s.e.) | IBS-LS p < 0.025 / 0.05 |
+|---|---|---|---|---|---|---|
+| iid | no-edge | 1,000 | 0.5% (0.2%) | 1.1% / 3.5% | 0.7% (0.3%) | 2.6% / 4.9% |
+| garch | no-edge | 1,000 | 0.3% (0.2%) | 1.4% / 3.7% | 1.7% (0.4%) | 3.1% / 5.8% |
+| varprem | no-edge | 1,000 | 1.1% (0.3%) | 2.2% / 4.4% | 1.5% (0.4%) | 3.6% / 7.1% |
+| regime | no-edge | 1,000 | 0.2% (0.1%) | 0.9% / 2.7% | 0.8% (0.3%) | 2.3% / 4.7% |
+| factor | no-edge | 1,000 | 0.1% (0.1%) | 0.9% / 2.3% | 0.8% (0.3%) | 2.4% / 4.9% |
+| weekend | no-edge | 1,000 | 0.3% (0.2%) | 1.3% / 2.8% | 0.9% (0.3%) | 2.5% / 4.8% |
+| bull | information | 400 | 0.8% (0.4%) | 1.2% / 3.8% | 1.5% (0.6%) | 2.8% / 6.5% |
+| planted κ = 0.05 | power | 200 | 35.0% (3.4%) | 53.5% / 69.0% | 74.0% (3.1%) | 84.5% / 93.5% |
+| planted κ = 0.10 | power | 200 | 98.0% (1.0%) | 100.0% / 100.0% | 100.0% (0.0%) | 100.0% / 100.0% |
+
+**Every no-edge row is within the limit** for both rules (the highest is garch IBS-LS,
+1.7%). Pooled over the 6,000 no-edge panels the rate at p < 0.01 is 0.42% for
+IBS-L and 1.07% for IBS-LS, against a nominal 1.0%. At p < 0.05, which the test no longer uses,
+varprem's IBS-LS row is 7.1%: the
+null is liberal there, as in the first calibration. The planted κ = 0.10 edge is detected at p < 0.01 in
+98% (IBS-L) and
+100% (IBS-LS) of panels.
+
+### Power table
+`round8.power_table` (`research/round8/power_table.csv`, `r8-power` at commit `1aff072`):
+- iid Gaussian calendar-day returns, 200,000 simulations per row from exact sufficient statistics, seed 8;
+- **dev** = 8,219 days. A dev pass needs mean > 0 and DSR ≥ 0.95 at N_eff (null variance 1/(T − 1));
+- **holdout** = 3,926 days. A holdout pass needs mean > 0 and Sharpe ≥ 50% of dev's;
+- ρ = the share of the true dev Sharpe that survives into the holdout.
+
+Three variants:
+- **constant:** the full book every dev day.
+- **ramp:** the dev mean scales with the live share of the 3 slots, and the variance with it, from the ready dates above
+  (18.1 full-book years).
+- **ramp+alpha:** the row's Sharpe is the true *alpha* Sharpe.
+  - The strategy is β·b + a, where b is the account-scaled hold at an annual Sharpe of 0.45, and β·sd(b) = 0.5 sd(a), so
+    the hold explains 20% of the variance.
+  - Dev also needs alpha PSR ≥ 0.95. The holdout also needs alpha mean > 0 and alpha Sharpe ≥ 50% of dev's.
+  - β is fitted by OLS in each window.
+
+**constant** (22.5 full-book dev years; P(pass) at N_eff < 2 / 3):
+
+| True dev Sharpe | P(dev) N_eff < 2 / 3 | P(pass) ρ = 1 | P(pass) ρ = 0.5 | P(pass) ρ = 0 |
+|---|---|---|---|---|
+| 0 | 5.0% / 0.6% | 1.2% / 0.1% | 1.2% / 0.1% | 1.2% / 0.1% |
+| 0.25 | 32.2% / 9.6% | 16.4% / 4.0% | 11.4% / 2.6% | 7.1% / 1.6% |
+| 0.5 | 76.7% / 44.9% | 57.3% / 31.2% | 34.3% / 17.1% | 13.5% / 6.0% |
+| 0.75 | 97.3% / 85.7% | 85.1% / 74.0% | 47.8% / 39.9% | 11.3% / 8.6% |
+| 1 | 99.9% / 98.8% | 93.9% / 92.8% | 49.8% / 48.9% | 6.0% / 5.8% |
+
+**ramp** (18.1 full-book dev years; P(pass) at N_eff < 2 / 3):
+
+| True dev Sharpe | P(dev) N_eff < 2 / 3 | P(pass) ρ = 1 | P(pass) ρ = 0.5 | P(pass) ρ = 0 |
+|---|---|---|---|---|
+| 0 | 5.0% / 0.6% | 1.2% / 0.1% | 1.2% / 0.1% | 1.2% / 0.1% |
+| 0.25 | 28.1% / 7.6% | 14.5% / 3.2% | 10.1% / 2.1% | 6.0% / 1.2% |
+| 0.5 | 68.4% / 35.6% | 52.1% / 25.1% | 31.6% / 13.9% | 12.9% / 5.0% |
+| 0.75 | 93.9% / 75.6% | 84.0% / 66.5% | 49.9% / 37.3% | 12.8% / 8.6% |
+| 1 | 99.5% / 96.0% | 95.1% / 91.6% | 55.8% / 53.0% | 8.1% / 7.3% |
+
+**ramp+alpha** (18.1 full-book dev years; P(pass) at N_eff < 2 / 3):
+
+| True dev Sharpe (alpha) | P(dev) N_eff < 2 / 3 | P(pass) ρ = 1 | P(pass) ρ = 0.5 | P(pass) ρ = 0 |
+|---|---|---|---|---|
+| 0 | 4.9% / 3.1% | 1.1% / 0.6% | 1.1% / 0.7% | 1.1% / 0.6% |
+| 0.25 | 27.6% / 20.1% | 13.5% / 9.3% | 9.2% / 6.3% | 5.7% / 3.9% |
+| 0.5 | 67.9% / 56.7% | 50.0% / 40.9% | 29.9% / 23.8% | 11.7% / 9.1% |
+| 0.75 | 93.7% / 87.8% | 82.4% / 76.8% | 47.5% / 43.6% | 11.9% / 10.6% |
+| 1 | 99.5% / 98.4% | 94.3% / 93.2% | 53.6% / 52.7% | 7.3% / 7.0% |
+
+- **The dev Sharpe needed** (constant): about 0.35 at N_eff < 2, 0.46 at 2, 0.53 at 3 and 0.57 at 4.
+- **Decay decides the holdout.** At McLean–Pontiff-like decay (ρ ≈ 0.4–0.5), even a strong rule passes about half the
+  time. A fully decayed edge (ρ = 0) still passes the holdout about 6–18% of the time after a dev
+  pass, at true Sharpes of 0.5–1.0.
+- **Not modelled** (each can only lower these numbers):
+  - the null gate at p < 0.01, which at the calibration's planted κ = 0.05 edge (about 6 bp) detects
+    35% / 74%, against 48% / 82% at p < 0.025 in the first calibration;
+  - 2× costs, funding, year share, plateau, breadth and the holdout drawdown gate;
+  - weekend zeros in the calendar series;
+  - the correlation between the markets (the ramp's variance scales with the live share, as in Round 6).
+
+### Dev gates (each primary on its own config)
+1. At least 100 trades (holding episodes). Expected: about 2,000 for IBS-L and about 5,000 for IBS-LS.
+2. Mean daily return > 0 at 2× fees and slippage.
+3. Mean daily return > 0 under the funding stress at base costs.
+4. **Null p < 0.01.**
+5. DSR ≥ 0.95 at the family N_eff (Amendment 1):
+   - N_eff = `stats.effective_trials` of all 12 configs' dev daily returns;
+   - null variance 1/(T − 1);
+   - no deflation when N_eff < 2.
+6. **Alpha (round-specific):** PSR ≥ 0.95 of the residual after an OLS beta (`stats.beta_alpha`) to the account-scaled
+   buy-and-hold.
+   - The hold, literally: each market's close-to-close return on its own trade date, summed over the markets with a
+     return that day and divided by 3. Days with none are 0, and there are no costs.
+   - Why not Round 6's mean of the available markets: it would triple the benchmark's weight after 2000 against the
+     SPY-only years and bias one OLS beta.
+7. Best calendar year ≤ 65% of the summed dev daily returns (1993 counts from July).
+8. Plateau: all 3 neighbours have a positive total return at base costs.
+9. Breadth: at least 2 of 3 markets have a positive summed contribution (the sleeve's daily returns / 3) at base costs.
+
+PBO (CSCV over the 12 configs, 16 slices) is reported only (Amendment 2).
+
+### Holdout gates
+These apply to the candidate only. One unlock serves both primaries; only primaries that passed dev are evaluated.
+1. Mean daily return > 0.
+2. Sharpe ≥ 50% of the dev Sharpe.
+3. Worst end-of-day drawdown ≤ the 95th percentile of a dev block bootstrap:
+   - block 30, 10,000 paths of 3,926 days, seed 7;
+   - drawn from the first day all 3 markets are ready (about 2000-09-20) to 2015-12-31;
+   - computed and stored at the sweep for each primary.
+4. Alpha mean > 0, with the beta from an OLS fit inside the holdout against the holdout's account-scaled hold.
+5. Alpha Sharpe ≥ 50% of the dev alpha Sharpe.
+
+### Verdict and decision rule
+- **PASSES IN PRACTICE** = the candidate passes every dev gate and every holdout gate.
+- **Candidate:** the primary that passed every dev gate. If both did, the one with the higher dev alpha PSR; if those tie
+  (the PSR saturates at 1), the higher dev alpha Sharpe; then IBS-L.
+  - The candidate is recorded in the dev verdict (`reports/results/round8/IBS.json` and the `r8-sweep` record) before
+    the unlock.
+  - **Only the candidate can pass.** The other primary's holdout result is information only and can never be promoted,
+    so the holdout never chooses.
+- **FAIL:** the rule is closed on these markets, with no reruns or variants. **Any error after the unlock is a FAIL.**
+- **Checkpoint:** after a dev pass, stop for the owner's OK before the unlock, because the unlock uses up these markets'
+  only clean holdout.
+- **What a pass means:** a separately registered paper book only, with no real orders and no API keys.
+  - Its first step is the never-run check of the SPY, QQQ and EWY perps against the proxies, from the VPS.
+  - Real money stays the owner's decision after a forward pass.
+  - F1 and D1 are unchanged.
+
+### Holdout lock and run order
+1. **Code and tests,** on synthetic data, with two independent code reviews and a re-review of the fixes. Then
+   `r8-calibrate` and `r8-power` (synthetic), committed with the code, and then this section.
+2. **`r8-data`:** the OHLC re-parse of Round 6's raw files, the blind data report and the manifest, committed.
+   - Any red flag stops the round.
+   - It refuses to run again once the report or the manifest exists.
+3. **`r8-sweep`** logs a start record and stops.
+   - **The record pins:**
+     - the version;
+     - the SHA256 of the 18 code files, both data manifests, the data report, `F1_dev_daily.parquet` and this section's
+       committed text;
+     - the numpy, numba, pandas, scipy, pyarrow and Python versions.
+   - **The run:** the run log (`research/round8/runs.jsonl`) is committed, and the second `r8-sweep` runs dev once for
+     both primaries.
+   - **Refusals:** a sweep is refused if any start record for its version, in the working copy or in any committed
+     version of the log, has different pins.
+   - **Hard errors:** a run record is logged before the run starts, and any error before the dev verdict is logged as a
+     hard error. A version bump may run only after every earlier started version has a committed hard error.
+   - **Once any version has a dev verdict (PASS or FAIL), the dev sweep never runs again,** with or without a version
+     bump.
+   - **The verdict:** `reports/results/round8/IBS.json` is saved first. The `r8-sweep` record logs the candidate, every
+     pin and the yardsticks: each primary's dev pass, gates, Sharpe, alpha PSR, alpha Sharpe and drawdown limit.
+4. **An independent rebuild of dev** from this text, before the outcome is written.
+   - **Outcomes are written as separate top-level sections (`## Round 8 ... outcome`), never inside this section, whose
+     committed text is pinned.**
+5. **The holdout,** only for a dev pass and only with the owner's OK: `r8-validate --unlock-holdout`, once
+   (`[R8: IBS v1]`).
+   - **It checks:**
+     - the pins and the committed verdict;
+     - a committed `r8-sweep` record whose candidate, yardsticks and pins equal `IBS.json`'s, and exactly one logged
+       verdict;
+     - the trial registry, the data report, the manifests, the calibration, the power table and
+       `F1_dev_daily.parquet`;
+     - that the holdout log has no Round 6 record.
+   - **What it logs:** a validate-start record in the run log, then the structured unlock record.
+   - **There is one unlock and no resume:**
+     - any Round 8 holdout-log record or validate-start record, in any committed version of the logs or their working
+       copies, counts as a touch;
+     - a touch without a recorded result is recorded as a FAIL;
+     - any error after the unlock is a FAIL.
+   - Once the holdout is touched, the dev sweep can never run again.
+   - Independent checks after the holdout verdict log each load as `[R8 verify`; such a load is refused before the
+     unlock.
+
+**Code freeze:** the 18 pinned files must not change between the sweep start record and the holdout. They include shared
+modules such as `run.py`, `stats.py` and `config.py`. By design, any edit blocks the Round 8 holdout for good.
+
+### Trials and multiple testing
+- **Own registry,** as in Round 6, because the 1993–2015 calendar would distort the crypto N_eff:
+  - `research/round8/trials.csv` and `research/round8/neff_history.jsonl`;
+  - the 12 trial return series in `reports/results/round8/`;
+  - version 1. A version bump, allowed after a hard error only, adds trials.
+- **Family N_eff** over all 12 configs, used for both primaries' DSR.
+- **Reported:**
+  - DSR at the raw N = 12;
+  - N_eff together with M1's 3 configs, and each primary's DSR at it;
+  - the strict tier: DSR on dev (and on dev + holdout after the unlock) at N = max(the project's ratcheted N_eff, Round
+    8's own, 14.85 + 5 = 19.85).
+
+### Reported, not gated
+- PBO and weekly t.
+- Holdout alpha PSR, a stricter alternative the owner could ask for.
+- Weekly correlation with F1 and its HAC alpha:
+  - over 2020–23 against `F1_dev_daily.parquet`;
+  - over 2024–26 against F1's committed holdout returns;
+  - these overlaps lie inside the holdout, so this is never a gate.
+- Results by market and by year; Mondays against other days; the null statistic by the decision date's volatility
+  tercile and gap.
+- The next-open and next-close fill sensitivities; Roll's implied spread by market and era (1993–2000, 2001–08,
+  2009–15); 2× costs plus funding; maker-first.
+- Turnover, days with orders, days in market, fees paid, and the funding stress cost per year.
+
+### Disclosures
+- **Clean status of 2016-01-01 → 2026-09-30 for SPY, QQQ and EWY:**
+  - never loaded by any strategy run;
+  - no `[R6` or Round 6 record in `holdout_log.jsonl` (now enforced);
+  - Round 6's data report used holdout rows only for dates, counts, signs and runs of equal closes;
+  - the Amendment 1 source check used only dev returns;
+  - the 2026 perps-against-proxies check was never run.
+- **Not blind:**
+  - General market history is known: the 2016–26 US bull market, with the drawdowns of 2018 Q4, 2020 and 2022, and
+    Korea's.
+  - The planner knows, in general, practitioner commentary that daily mean-reversion rules on US index ETFs kept working
+    for much of the time after 2016, with no specific figures.
+  - Seen during planning, in search snippets only and not read further:
+    - a 2023 study (Pandey & Joshi, arXiv 2306.12434) reported that IBS "held up" on more recent country-ETF data;
+    - a blog headline claimed an IBS strategy gained on SPY.
+- **Order of events (accepted by the owner with the plan):**
+  1. the snippet about the 2023 study was seen while sources were being searched;
+  2. after that, the planner recommended IBS over RSI(2);
+  3. the owner chose IBS.
+
+  So holdout-period information about other ETFs may have softly shaped the choice of idea. No Round 8 data was used,
+  the rule and its thresholds come from the 2014 paper, and no parameter was chosen with data after 2013.
+- **Dev mostly replicates the paper's own sample.** 1993–2013 lies inside it; only 2014–15 and the holdout come after.
+  - Amendment 1's "any earlier grid that chose them" cannot be applied in full: the author's own search over thresholds
+    and indicators cannot be counted, so N_eff over the 12 configs under-deflates.
+  - **The holdout is the real evidence.** The dev DSR and null show a replication, not a discovery.
+- **The main execution risk:** the signal and the fill share one closing price.
+  - Transient noise in the ETF's closing print is booked as edge: bid-ask bounce, auction imbalance, and EWY's premium or
+    discount to a stale NAV. A perp order at the close cannot capture it, and IBS-L leans on EWY.
+  - Reported in dev: Roll's implied spread, next to the next-open and next-close fills.
+  - Costs are charged conservatively: a full round trip on every episode, with renewals free.
+  - The paper's data source (CSI) may have used dividend-adjusted closes, which would overstate its SPY gross figures by
+    about 1 bp a day.
+- **Seen before:**
+  - Round 6's M1 ran on these dev closes, and Round 6's data report checked dev returns.
+  - An unregistered exploratory long-only D1 trend run (2026-10-17) also used SPY, QQQ and EWY dev closes up to 2015. It
+    was trend only, with no mean-reversion statistic. This was added to the plan after approval, as a disclosure only.
+- **Proxies differ from the perps:**
+  - the ETF's official close against the perp's price at the close;
+  - Binance's EWMA pricing at weekends (Friday positions carry the weekend);
+  - the perps are listed only since 2025-12, and their funding is unknown;
+  - the perp's own US-session high and low may differ from the ETF's;
+  - the slippage tiers come from one snapshot;
+  - dividends are excluded.
+- **Multiplicity:** 2 co-primaries, so the null threshold is split and N_eff is shared.
+- **The rulebook is extended:** the alpha gates and the p < 0.01 null gate are stricter than the practical rulebook,
+  by owner decision.
+- **The null's threshold was set after a calibration failed.** No data was involved, and the scenarios and the null are
+  unchanged. Every synthetic run of the null seen before this registration:
+  - **The development pilot** (300 panels × 199 draws, seed 88's streams) at p < 0.05 / p < 0.025:
+
+    | Scenario | IBS-L | IBS-LS |
+    |---|---|---|
+    | iid | 1.0% / 0.7% | 5.7% / 2.3% |
+    | garch | 3.7% / 1.0% | 3.0% / 1.7% |
+    | varprem | 8.0% / 1.7% | 8.3% / 4.0% |
+    | regime | 1.0% / 0.7% | 5.0% / 1.3% |
+    | factor | 2.7% / 1.3% | 4.3% / 2.0% |
+    | weekend | 2.7% / 1.3% | 3.0% / 1.0% |
+
+    Planted κ = 0.10 was detected 98–100% of the time.
+  - **Diagnostics** (600 fresh panels, 199 draws) at p < 0.05 / p < 0.025:
+
+    | Variant | IBS-L | IBS-LS |
+    |---|---|---|
+    | varprem as registered | 5.3% / 1.8% | 6.0% / 3.0% |
+    | without the leverage effect | 2.5% / 0.7% | 4.8% / 3.0% |
+    | on the factor structure | 3.7% / 1.2% | 4.8% / 2.0% |
+
+  - The first calibration and its diagnostics, above.
+  - Two reviewers' own synthetic runs (iid, garch, varprem and factor, 400–1,200 panels), with mean z +0.06 to +0.27.
+
+### Changes from the approved plan, decided before any data
+- **The null's gate is p < 0.01 per primary, and the calibration rule is ≤ 2.5% at p < 0.01** (owner decision
+  2026-10-20, above). The plan had p < 0.025, with limits of 7% and 3.5%.
+- **The null lives with the rule** (`r8_ibs.py`, as in Round 7), not in `round8.py`. That way the calibration's SHA256
+  pin covers exactly the rule, the null, the sizing they reuse and the calibration code.
+- **No resume and no rerun.**
+  - Round 7's one-time resume after a crash is dropped: the plan says any error after the unlock is a FAIL.
+  - The dev sweep never runs again once any version has a verdict: the plan says a FAIL closes the rule with no reruns
+    or variants, and a rerun after a pass could re-roll the candidate.
+- **Implementation choices the plan left open:**
+  - the last-close convention of same-close fills (above);
+  - the EWMA (the recursion with weight 0.06 on the newest squared index return, started at the first return and
+    defined from the 30th);
+  - the terciles: a rank split of the window's dates in each era, with ties by date. The strata are a conditioning
+    variable of the null, never a signal;
+  - warm-up dates are split by era and gap;
+  - a held market-day without a next close inside the window earns nothing and leaves its vector;
+  - a held date whose stratum has no eligible date stays in place (counted; not expected);
+  - the null's random stream is numpy's PCG64;
+  - the next-open sensitivity fills a missing open at the close;
+  - the strict tier's N also includes Round 8's own ratchet;
+  - the candidate's tie-break by dev alpha Sharpe;
+  - the account-scaled hold and the null's index count a market from its second row, not from when its σ exists. That
+    is about 90 trading days early for QQQ and EWY, reading the plan's "available" as "has a return that day", as in
+    Round 6.
+- **Calibration:**
+  - 400 bull panels and 200 panels for each planted κ: 6,800 panels in all (the plan said about 7,200);
+  - the generator's free parameters are those in the table above. The plan fixed only the scenario list, λ = 3, the
+    drift sizes, the t(4) shocks and the bridge;
+  - the 80% detection threshold for the planted κ = 0.10 edge was set after the development pilot.
+- **Power** is computed from exact sufficient statistics of Gaussian days. That is equivalent to simulating the paths,
+  and was checked against brute-force simulation by a unit test and by a reviewer in 12 cells. The alpha variant's
+  β·sd(b) = 0.5 sd(a) and the hold's 0.45 Sharpe were chosen before any data.
+- **Data:**
+  - red flags 2 and 3 are shares of the dev + holdout rows (counts); flag 4 uses dev rows only;
+  - the Round 8 manifest also pins Round 6's raw and parquet SHA256s, and every load re-checks both.
+- **From the code reviews** (every finding was fixed or is listed here):
+  - a verify load is refused before the unlock and counts as a touch;
+  - the unlock refuses a second call and any reason carrying a round tag;
+  - the preflight compares every pin and yardstick of `IBS.json` with the committed `r8-sweep` record;
+  - an exit that leaves a sleeve's cash ≤ 0 is booked as a liquidation at 0;
+  - the data report excludes rows after 2026-09-30 from its shares.
+  - Independent checks by the reviewers:
+    - lag-1 parity with `engine.run` on 400 fuzzed seeds (18,854 trades);
+    - the same-close P&L identity on 300 seeds;
+    - the power function against brute force;
+    - `cmd_sweep` and `cmd_validate` end to end on synthetic data.
+- **Known limits, accepted:** the validate step is single-phase, so its start and unlock records stay uncommitted until
+  they are committed after the run.
