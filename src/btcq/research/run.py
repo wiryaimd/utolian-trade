@@ -291,6 +291,7 @@ def main() -> None:
                                     "r5-d1-info",
                                     "r6-power", "r6-download", "r6-sweep", "r6-validate",
                                     "r7-power", "r7-calibrate", "r7-download", "r7-sweep", "r7-validate",
+                                    "r8-power", "r8-calibrate", "r8-data", "r8-sweep", "r8-validate",
                                     "x1-start", "x1-stage-a", "x1-download", "x1-stage-b", "x1-report"])
     ap.add_argument("--strategy", default="all")
     ap.add_argument("--finalists", action="store_true")
@@ -395,6 +396,21 @@ def main() -> None:
                 raise SystemExit("r7-validate needs --unlock-holdout")
             round7.cmd_validate(a.reason if a.reason != ap.get_default("reason")
                                 else "Round 7 holdout (pre-registered)")
+    elif a.cmd.startswith("r8-"):
+        from btcq.research import round8
+        if a.cmd == "r8-power":
+            round8.cmd_power()
+        elif a.cmd == "r8-calibrate":
+            round8.cmd_calibrate()
+        elif a.cmd == "r8-data":
+            round8.cmd_data()
+        elif a.cmd == "r8-sweep":
+            round8.cmd_sweep(rerun=a.rerun)
+        elif a.cmd == "r8-validate":
+            if not a.unlock_holdout:
+                raise SystemExit("r8-validate needs --unlock-holdout")
+            round8.cmd_validate(a.reason if a.reason != ap.get_default("reason")
+                                else "Round 8 holdout (pre-registered, owner-approved)")
     elif a.cmd.startswith("x1-"):
         from btcq.research import x1_execution as x1
         if a.cmd in ("x1-download", "x1-stage-b") and a.tick_set is None:
