@@ -2566,3 +2566,145 @@ modules such as `run.py`, `stats.py` and `config.py`. By design, any edit blocks
     - `cmd_sweep` and `cmd_validate` end to end on synthetic data.
 - **Known limits, accepted:** the validate step is single-phase, so its start and unlock records stay uncommitted until
   they are committed after the run.
+
+## Round 8 outcome (2026-10-20, after the dev sweep)
+
+**Verdict: Round 8 FAILS dev. Neither primary passes every dev gate, so there is no candidate.** As registered:
+- the 2016-01-01 → 2026-09-30 holdout of SPY, QQQ and EWY was not opened;
+- `research/holdout_log.jsonl` has no Round 8 record;
+- IBS is closed on these markets, with no reruns or variants.
+
+Commits and files:
+- **Commits:** code `ea9c569` and `1aff072`, registration `b5aa5e4`, data `ff87489`, start record `3572b6a`, dev result
+  `1f00300`.
+- **Verdict:** `reports/results/round8/IBS.json`.
+- **Run log:** `research/round8/runs.jsonl`.
+
+**Dev, 1993-07-01 → 2015-12-31, $10,000 start (3 slots of $3,333):**
+
+| | IBS-L (long when IBS ≤ 0.2) | IBS-LS (also short when IBS ≥ 0.8) | Account-scaled hold |
+|---|---|---|---|
+| Trades | 2,271 (101 a year) | 5,051 (224 a year) | – |
+| Total return | +74.7% (CAGR 2.5%) | −53.1% | +257.5% |
+| Sharpe (√365) | 0.33 | −0.22 | 0.37 |
+| Worst drawdown | 22.9% | 58.6% | 60.6% |
+| Days in market / days with an order | 30% / 48% | 67% / 81% | – |
+| Fees + slippage paid | $14.0k + $6.4k | $27.0k + $11.4k | – |
+
+| Dev gate | IBS-L | IBS-LS |
+|---|---|---|
+| ≥ 100 trades | 2,271, pass | 5,051, pass |
+| Mean daily > 0 at 2× fees and slippage | −9.7e-5 (total −58.6%), **fail** | −4.7e-4 (−98.2%), **fail** |
+| Mean daily > 0 under the funding stress | +5.0e-5 (stress cost 1.0%/yr), pass | −1.4e-4, **fail** |
+| Null p < 0.01 | 0.001, pass | 0.001, pass |
+| DSR ≥ 0.95 at the family N_eff (2.03) | 0.848, **fail** | 0.058, **fail** |
+| Alpha PSR ≥ 0.95 vs the account-scaled hold | 0.771 (β 0.21, alpha +1.2%/yr, alpha Sharpe 0.16), **fail** | 0.143 (alpha −2.7%/yr), **fail** |
+| Best year ≤ 65% | 39% (2003), pass | total ≤ 0, **fail** |
+| Plateau: 3 neighbours positive | θ 0.15 +59%, θ 0.25 +47%, h 2 +290%: pass | θ 0.15 −39%, θ 0.25 −70%, h 2 +8%: **fail** |
+| ≥ 2 of 3 markets positive | SPY +0.2%, QQQ +18.1%, EWY +46.1% (summed daily): pass | SPY −91.5%, QQQ −29.2%, EWY +61.1%: **fail** |
+
+**What the result says:**
+- **The IBS effect is real in dev.** The date-level null rejects strongly for both rules (p = 0.001, the smallest
+  possible).
+  - IBS-L's gross sized P&L per held market-day is 22.0 bp, against the null's 4.6 bp (null s.d. 4.1 bp).
+  - IBS-LS's is 12.2 bp, against −0.7 bp.
+  - This mostly replicates the paper on its own sample: 1993–2013 lies inside it.
+- **Costs take most of it.**
+  - IBS-L's trades average 24.7 bp before fees (after slippage), and 14.7 bp after.
+  - On SPY the fees exceed the edge: −$491 net on 930 trades. EWY carries the rule (+$8.6k of the +$9.7k net) and QQQ
+    adds +$1.7k. This is the pattern the pre-data arithmetic expected.
+  - At 2× costs, IBS-L loses 59%.
+- **The shorts lose.** IBS-LS's shorts average 5.8 bp before fees and −4.2 bp after (2,780 trades). That turns the
+  account negative, as the plan expected.
+- **Not distinguishable from holding the markets, after costs.** IBS-L's alpha after its 0.21 beta is +1.2% a year,
+  with PSR 0.77.
+- **The edge sits in the same-close fill.** Reported only:
+  - a fill at the next open leaves IBS-L at +17%, Sharpe 0.12;
+  - a fill at the next close leaves it at −24%.
+  - Roll's implied spread from daily close-to-close returns (dev) is large in the early years: EWY 178 bp in 2000 and
+    140 bp in 2001–08, QQQ 146 bp in 1999–2000, SPY 48–75 bp. So part of the "reversion" may be closing-print noise
+    that a perp order at the close could not capture. This was the registered main execution risk.
+
+**Reported, not gated:**
+- **DSR:**
+  - raw N = 12: 0.45 (IBS-L), 0.003 (IBS-LS);
+  - with M1's 3 configs (N_eff 2.87): 0.77 / 0.03;
+  - strict tier (N = 19.85): 0.36 / 0.002.
+- **PBO:** 0.04.
+- **IBS-L's weekly t:** 1.62.
+- **Maker-first:** IBS-L +114% (Sharpe 0.43); IBS-LS −25%. This is the information-only X1 cost model, calibrated on
+  crypto majors in 2023, and a resting order would also move the fill off the close.
+- **All 12 configs' totals** (information only; the primaries were fixed in advance, so testing h = 2 now would be a
+  new, post-hoc trial):
+
+  | Hold | L θ 0.15 | L θ 0.20 | L θ 0.25 | LS θ 0.15 | LS θ 0.20 | LS θ 0.25 |
+  |---|---|---|---|---|---|---|
+  | h = 1 | +59% | +75% | +47% | −39% | −53% | −70% |
+  | h = 2 | +274% | +290% | +279% | +20% | +8% | −21% |
+
+  The h = 2 versions trade less: about 1,500–1,900 trades for L against 1,800–2,600 at h = 1.
+- **The null statistic by the decision date** (IBS-L, gross sized P&L per held market-day):
+  - by the EWMA-volatility tercile: 14 / 26 / 25 bp from the lowest tercile to the highest;
+  - before a weekend or holiday: 10 bp, against 25 bp otherwise;
+  - by the decision date's weekday: Monday 39 bp, Thursday 6 bp.
+- **IBS-L's years:** losses in 1993–96, 2001, 2004–06, 2012 and 2015. 2015 was −16.3%, spread over all three markets:
+  QQQ −7.9%, EWY −4.5% and SPY −4.4% (summed daily). Its best years were 2003 (+28.5%) and 2007 (+19.7%).
+- **No liquidation** in any run.
+
+**Account and trade dollars differ by design.** The registered account is the sum of the slots' daily returns / 3,
+which rebalances the slots every day. The trade files' dollar P&L instead compounds each sleeve on its own:
+- IBS-L: about +97% from the trade dollars, against +74.7% for the account;
+- IBS-LS: about +75%, against −53%. The sleeves diverged widely: EWY's grew to about $16.3k, while SPY's fell to about
+  $156.
+
+The verdict uses the registered account. The per-market dollar figures above come from the trade files.
+
+**Before and after the paper's sample.** IBS-L's summed daily returns are +0.79 over 1993–2013 and −0.15 over 2014–15
+(2015 alone −0.17). For IBS-LS they are −0.23 and −0.37.
+
+**Independent check (before this outcome was written).** Two verifiers, loading dev rows only (`load_ohlc(m, "dev")`,
+asserting every date is before 2016):
+1. **Rebuild.** One wrote its own rule, simulator, account, statistics, null and bootstrap from the registered text,
+   without reading the project's Round 8 code, `engine.py` or `stats.py`.
+   - All 12 configs' daily returns match within 1.2e-15. The benchmark matches exactly.
+   - Every IBS-L and IBS-LS trade matches, base and 2×: symbols, dates, sides, reasons and prices exactly; net within
+     2e-11 USD.
+   - Every gate value matches, and all 18 gate booleans are the same.
+   - The null's actual statistics match within 1e-17, and so do the strata and held counts. Its own 1,000-draw null
+     (another random stream) gives p = 0.001 for both, with the null distributions matching the committed ones (KS p
+     0.69 and 0.65).
+   - The holdout drawdown limits match within 2e-15.
+2. **Protocol audit.**
+   - The commit chain is linear and `src/` is unchanged since `1aff072`.
+   - Every pin recomputed at HEAD equals the start and sweep records.
+   - There is exactly one start, run and verdict record, with no hard error and no validate record.
+   - The calibration guard passes.
+   - `research/holdout_log.jsonl` is unchanged since 2026-10-18 and has no Round 6 or Round 8 record.
+   - No output is dated 2016 or later.
+   - The data report has 0 red flags.
+   - It also recomputed every gate with its own code (differences ≤ 1e-16) and did its own full rebuild (≤ 7.5e-16).
+
+**Errata to the registration** (the registered section stays as committed, because it is pinned):
+- **Calibration draws.** The Null calibration paragraph says "seed 1088, 999 draws (at 999 draws, p < 0.01 means at most
+  8 draws at or above the actual, nominal 0.9% …)". The registered calibration actually used **1,000 draws**, the dev
+  test's own count: p < 0.01 means at most 9 draws at or above the actual, nominal 0.999%. The CSV's `draws` column,
+  `CAL_DRAWS = 1000` and the `1aff072` commit message all say 1,000. The sentence was left from the draft written
+  before a reviewer asked for 1,000 draws. No result is affected.
+- **Two conventions the text leaves implicit,** confirmed by the exact rebuild (neither affects the verdict):
+  - the volatility terciles rank only the dates outside the warm-up;
+  - the holdout drawdown bootstrap is circular: block starts are drawn over all source days and wrap at the end.
+- **A latent pin quirk in the shared `guards.py`,** found by the audit. While the Round 8 section was the last in the
+  file, its committed text had no trailing newline (`guards.git` strips it). Appending this outcome section adds one,
+  so the section hash at HEAD now differs from the pinned one although the text is unchanged. It is moot because the
+  holdout is never opened. Later rounds should hash rstripped text.
+
+**What it means, in plain words:**
+- The internal-bar-strength effect the paper found is clearly present in SPY, QQQ and EWY from 1993 to 2015: a close
+  near the day's low did lead to a better next day, far more than random days in the same market conditions.
+- But a 1-day trade on Binance perps pays about 14–16 bp per round trip, and the long trades earned only about 25 bp
+  before fees. After costs, IBS-L made about 2.5% a year with a 23% drawdown, much less than simply holding the three
+  ETFs. With doubled costs it lost money.
+- Most of the profit came from EWY, and much of it needs a fill at exactly the same closing price that produced the
+  signal. A fill at the next close turned it into a loss.
+- The long-short version lost money: the shorts did not cover their costs.
+- This closes daily IBS mean reversion on these markets. The holdout stays clean and unused.
