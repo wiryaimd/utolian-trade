@@ -1,0 +1,4 @@
+market,rows,rows_dev,rows_holdout,rows_after_holdout,first_date,last_date,dev_null_open,dev_null_high,dev_null_low,dev_ohlc_violations,dev_high_eq_low,holdout_null_open,holdout_null_high,holdout_null_low,holdout_ohlc_violations,holdout_high_eq_low,null_high_or_low_share,ohlc_violation_share,dev_high_eq_low_share,dev_max_range,dev_range_15_30_dates,dev_range_gt_30_dates,dev_range_gt_30,closes_match_round6,red_flag_reasons,red_flag
+SPYUSDT,8475,5774,2701,11,1993-01-29,2026-09-30,0,0,0,0,0,0,0,0,0,0,0.0,0.0,0.0,0.1170621537892832,,,0,True,,False
+QQQUSDT,6933,4232,2701,11,1999-03-10,2026-09-30,0,0,0,0,0,0,0,0,0,0,0.0,0.0,0.0,0.2097097097097097,2000-04-04;2001-01-03;2015-08-24,,0,True,,False
+EWYUSDT,6635,3934,2701,11,2000-05-12,2026-09-30,0,0,0,0,27,0,0,0,0,0,0.0,0.0,0.0068632435180477885,0.18065980634531265,2005-08-04;2008-09-19;2008-10-29,,0,True,,False
