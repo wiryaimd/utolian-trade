@@ -1792,3 +1792,118 @@ per-coin corrections. These form **X1-cost-v1** (`research/x1/x1_cost_v1.csv`, p
   reviewer's point is recorded: with ticks this small, strict fills nearly every leg, so its result sits close to the
   fee-only ceiling, and check (f) is the operative test of whether the 1m model is too optimistic.
 - **bookTicker exists only from 2023-05-16 in dev,** so the calibration covers one fairly calm regime.
+## Execution study X1 — Stage A outcome (2026-10-19, after the Stage A run)
+
+**Verdict: F1 NO-GO.** Under the strict model the primary policy (T = 15) adds +0.34%/yr, below the +0.5%/yr bar of
+rule (a). It also fails rule (d): 2 of 4 years and 3 of 5 coins are positive. As registered, B2 is never downloaded,
+and the paper bot stays taker. **D1 is NO-GO by arithmetic** (registered). B1 is not downloaded: it needs the
+owner's OK.
+
+**How the run went:**
+- Commits: code `8f232eb`, registration `e89b4c9`, start record `3bc6eaf`, result `87ab1b5`.
+- `x1-stage-a` ran once on dev data, with no hard error, and nothing dated 2024 or later was loaded.
+- The taker run reproduced `F1_dev_daily.parquet` exactly: max |difference| 0. That is CAGR 44.9%, Sharpe 1.20,
+  worst drawdown 28.1% and 600 trades.
+- Every hard check passed.
+- Results: `reports/results/X1_stage_a.json`; tables in `research/x1/`.
+
+**Strict model, F1 dev 2020-01 → 2023-12 (5-coin portfolio, against the taker run):**
+
+| Run | Gain vs taker | Sharpe | Worst DD | Maker fills / orders |
+|---|---|---|---|---|
+| taker (registered F1) | – | 1.202 | 28.06% | – |
+| strict T = 5 | +0.294 %/yr | 1.210 | 28.1% | 93.9% of 1,040 |
+| **strict T = 15 (primary)** | **+0.337 %/yr** | **1.211** | **28.14%** | **96.5% of 1,040** |
+| strict T = 60 | +0.147 %/yr | 1.206 | 28.0% | 98.4% of 1,040 |
+
+| Rule | Result | |
+|---|---|---|
+| (a) gain ≥ +0.5%/yr | +0.337%/yr | **fail** |
+| (b) bootstrap 5% bound > 0 | 1.44e-6 a day | pass |
+| (c) T = 5 and T = 60 > 0 | +0.294 and +0.147 %/yr | pass |
+| (d) ≥ 3 of 4 years and ≥ 4 of 5 coins | years 2020 −0.05%, 2021 +0.67%, 2022 −0.10%, 2023 +0.83% (2 of 4); coins BTC +3.2%, ETH +3.6%, SOL −0.3%, XRP −2.9%, BNB +3.2% (3 of 5), summed daily differences | **fail** |
+| (e) Sharpe −0.02 at most, drawdown +1 pp at most | 1.211 vs 1.202; 28.14% vs 28.06% | pass |
+
+**Where the strict result comes from:**
+- **The fills.** 1,004 of 1,040 orders filled as maker: 581 of 600 entries and 423 of 440 exits, half a minute
+  after posting on average. Each fill saved the 3 bp fee difference, and fees fell from $9,766 to $5,035.
+- **The orders that ran away.** The other 36 orders were the ones where price ran away. After 15 minutes they
+  crossed at prices 58.7 bp worse on average.
+- **Net effect.** +0.86 bp per order, which is about $34 a year on a $10,000 account.
+- **XRP and SOL lose.** XRP's tick is 0.7–5.9 bp, so filling on a print through the post price takes a larger move.
+  SOL's loss is mostly one unfilled exit on 2022-10-25 (−211 bp).
+
+**Reported, not gated:**
+- **Central model** (fills credited with the registered slippage): +0.85%/yr at T = 15, which would pass (a)–(e).
+- **Optimistic model** (a touch fills, at the post price): +1.35%/yr, which would also pass.
+- These are the plan's upper models, not the decision basis; check (f) would have been the test of whether the 1m
+  models are too generous.
+- **Post-and-cancel (information only, it changes F1's trades):**
+  - at T = 15, 19 of 600 entries were missed; those trades averaged −0.05 R against +0.34 R for the trades taken;
+  - at T = 60, 8 were missed, averaging +0.43 R.
+- **Tick sizes:** all 231 coin-months were inferred from the 1m price grid, with no exchangeInfo fallback. The tick
+  is 0.002–0.06 bp on BTC, up to 0.7–0.8 bp on ETH and BNB, up to 3.2 bp on SOL, and 0.7–5.9 bp on XRP.
+
+**Q3: what a maker-first order costs per side** (all 5 coins, T = 15; the taker cost is 6.6 bp: the 5 bp fee plus
+the 1–2 bp slippage):
+
+| Kind of order | Legs | strict c_eff | central | optimistic | strict markout 5 min after a fill |
+|---|---|---|---|---|---|
+| random | 39,999 | 5.68 bp (saves 0.92, CI 0.79–1.04) | 4.18 | 2.52 | −3.7 bp |
+| momentum (1h breakout) | 8,832 | 5.95 bp (saves 0.64, CI 0.18–1.11) | 4.41 | 2.66 | −7.5 bp |
+| reversion (1h 2σ move, faded) | 8,654 | 6.75 bp (saves −0.18, CI −0.76–0.40) | 5.25 | 3.42 | −1.7 bp |
+
+Fills are adversely selected: after a fill, the price keeps moving through the order. The conservative model
+saves under 1 bp a side, and nothing at all for orders that fade a move.
+
+**Screen** (`research/x1/stage_a_screen.csv`; the 1m costs above; information only):
+- **Strict:** no earlier fast family is in the band where execution could change it.
+- **Central and optimistic:** only S4 qualifies, and only for its entries from 2020 on (gross 7.3 bp per trade
+  against a maker-first round trip of 6.4–6.8 bp and a taker round trip of 12.0 bp).
+- **The other families sit outside the band:**
+  - F2, F3, F4, S5 and all-years S4 earn more than the taker round trip, so they failed for other reasons;
+  - S7, S8, F5 and F6 earn less than even the optimistic maker round trip.
+
+**Independent check (before this outcome was written).** Four verifiers, three of them using none of the X1 code:
+1. **Rebuild.** One wrote its own F1 and maker-first simulator from the registered rules. It reproduced the taker
+   run bit for bit (all 600 trades and every daily return) and strict T = 5, 15 and 60 to about 1e-16, including all
+   1,040 legs, every fill minute and every gate value.
+2. **Gates.** One recomputed every gate, including the bootstrap with its own code.
+3. **Q3 and screen.** One re-simulated all 57,489 Q3 legs (0 mismatches), rebuilt the momentum and reversion events
+   from its own 1h bars, re-derived the tick table (231 of 231 months) and recomputed the screen and the cost rows.
+4. **Protocol audit.** It found:
+   - linear commits, with the code and the registration unchanged after they were committed;
+   - every pin matching at HEAD, and exactly one run record and one result;
+   - `research/holdout_log.jsonl` unchanged, no date of 2024 or later in any output, and no tick download.
+
+Not rebuilt independently: the central and optimistic F1 runs, which are reported only.
+
+**Robustness (from the checks).**
+- **Rule (a) fails under every setting tried:** without the float-tolerance fix, +0.41%/yr; with the 2026 exchangeInfo
+  ticks instead of the inferred table, −0.05%/yr.
+- **Rule (d) is fragile:** without the tolerance fix it would pass (4 of 4 years, 4 of 5 coins). The verdict rests
+  on rule (a).
+
+**Erratum to the registration's Disclosures** (the registered section stays as committed, because it is pinned by
+SHA256):
+- **The counts came from mixed settings.** The fill counts quoted there as seen before registration (577 of 600
+  entries, 422 of 440 exits, and the per-coin and T = 5 counts) came from review runs that did not all use the
+  registered tick table. Some used the 2026 exchangeInfo ticks: BTC 0.1, BNB 0.01.
+- **The committed run differs.** It has 581 and 423, and the per-coin entry counts differ (BTC 116, SOL 106, XRP
+  104, BNB 120).
+- **One sentence was wrong.** The sentence "the only code change … moves every figure in the conservative direction"
+  is wrong: the tick source also differed, and for BTC and BNB that raised fills, the GO-favouring direction.
+- **The Q3 figures quoted there** (XRP and BTC random legs) do not match the committed legs either. The BTC figure
+  matches the exchangeInfo tick, and the XRP sample could not be identified.
+- **No effect on the result.** The code was frozen before the registration, the tick rule is in the registered
+  text, and the result is NO-GO.
+
+**What it means, in plain words:**
+- **For F1:** on these coins a resting limit order nearly always fills, because the tick is tiny. That saves the
+  3 bp fee difference. But the few orders that don't fill are exactly the breakouts that run away, and waiting
+  15 minutes on those costs about 59 bp. Net, maker-first execution would add about 0.3% a year to F1, below the bar
+  and negative on XRP and SOL. **The paper bot keeps taker orders.**
+- **For faster strategies:** the conservative model cuts the cost per side from 6.6 bp to about 5.7 bp. Only the
+  optimistic model, which fills on a touch at a better price, gets near 2.5 bp. Only tick data (B1, 5.7 GB) can say
+  which is closer to reality. Even under the optimistic model, no earlier fast family except S4's 2020+ entries
+  sits where cheaper execution would flip it.
